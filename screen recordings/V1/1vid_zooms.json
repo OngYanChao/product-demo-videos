@@ -1,0 +1,60 @@
+[
+  {
+    "id": "z0_prompt_typing",
+    "mode": "follow",
+    "source_t": 0.0,
+    "duration": 7.2,
+    "ease": 1.5,
+    "zoom": 1.5,
+    "region_pct": [40, 24, 38, 11],
+    "_beat": "Prompt typing region (scrub 0-7.2) — follow-zoom on the Cowork chat input box. Camera scales into the input field while the user types + clicks submit, then eases back out exactly at the loading-segment boundary (scrub 7.2). Continuous playback underneath.",
+    "_focal_subject": "Input field center at source (59%, 29.5%). Camera pans toward output center at peak. easeInOutSine glide."
+  },
+  {
+    "id": "z0b_progress_sidebar",
+    "mode": "follow",
+    "source_t": 10.2,
+    "duration": 31.3,
+    "ease": 1.5,
+    "zoom": 2.5,
+    "region_pct": [80, 0, 20, 30],
+    "_beat": "Progress sidebar follow-zoom (loading segment). 3s of full-frame loading after prompt-fire (scrub 7.2-10.2), then camera eases into the top-right Progress sidebar at scrub 10.2 (1.5s ease in matching z0 tempo). Camera holds zoom from 11.7 to 40.0 with source playing at natural speed underneath. Eases back out 40.0-41.5 (1.5s) JUST BEFORE the brief writing begins (step 5 active). NOTE: the natural-rate held portion (11.7-40.0) gets ffmpeg-post-processed with the tail-cut technique: keep ±1s around each tick moment (T1≈27.5, T2+3≈34.7, T4≈39), jump-cut between them. Result: 3 tail-cut clips × 2s + 1.5s ease-out = 7.5s of zoom-hold content, instead of the prior 8s compressed-speedup. Each checkmark tick visible at natural pace.",
+    "_focal_subject": "Progress sidebar center at source (~91%, 15%). zoom=2.5 keeps sidebar visible + readable while leaving some chat-thread context to the left (lower than the 4.0 first-attempt that made the sidebar dominate). Sidebar lands slightly right-of-center after clamp (corner element). 1.5s ease tempo matches z0 prompt zoom; user-flagged earlier 1.0s as too fast."
+  },
+  {
+    "id": "z1_value_row",
+    "mode": "annotate",
+    "source_t": 49.0,
+    "duration": 16.0,
+    "zoom_region_pct": [25, 24, 75, 73],
+    "highlight_region_pct": [27, 58.88, 44, 6.19],
+    "callout_number": 1,
+    "wait_cursor_clear": true,
+    "_beat": "Score panel — focus on Value row (3 — Expensive vs peers/fundamentals P/E 45.7, but well below AVGO 80, AMD 140, ARM 246). 16s hold for VO: 'Quality and Tactical pinned at ten. Momentum rolling. Value says it's expensive — and it is.' (Phase A note: VO covers Quality+Tactical+Momentum+Value across 16s — Phase B will likely split this into 4 separate annotate beats with each row's own spotlight.)",
+    "_focal_subject": "Value row across Factor/Score/Read/52-wk-trend columns. zoom_region zw=75 (extends from brief left edge to source right edge) puts brief on the LEFT half of frame after full-frame fill (scale ≈ 1.33×); grey dead space + right sidebar sit on the right where the panel overlays. zy=24/zh=73 keep highlight near vertical center of comp."
+  },
+  {
+    "id": "z2_total_trajectory",
+    "mode": "annotate",
+    "source_t": 52.85,
+    "duration": 10.0,
+    "zoom_region_pct": [25, 9, 75, 73],
+    "highlight_region_pct": [54.5, 43.83, 16.5, 6.52],
+    "callout_number": 2,
+    "wait_cursor_clear": true,
+    "_beat": "Trajectory column — focus on Total row's 52-wk trend cell (8.5 → 5.0 — material derating). 10s hold for VO: 'Eight-point-five to five-point-zero over the past year. Quality never moved.'",
+    "_focal_subject": "Total row's 52-wk-trend cell. Fires AFTER z1's ease-out (source plays through ~3.1s of scroll between z1's end at source 49.75 and z2's start at source 52.85). zoom_region zw=75 (brief on left half at scale 1.33×, dead space on right under the panel); zy=9 places the Total row near comp vertical center."
+  },
+  {
+    "id": "z3_bottom_line",
+    "mode": "annotate",
+    "source_t": 59.0,
+    "duration": 4.0,
+    "zoom_region_pct": [25, 2, 75, 73],
+    "highlight_region_pct": [27, 30, 42, 22],
+    "callout_number": 3,
+    "wait_cursor_clear": true,
+    "_beat": "Bottom Line opening — first 2-3 lines of the paragraph covering 'NVDA scores top-decile on Quality and Tactical with a 21% consensus upside, lowest peer volatility...'. 4s hold for VO: 'Top-decile quality compounder. Twenty-one percent consensus upside. Hold — the case is intact.'",
+    "_focal_subject": "Bottom Line section header + opening sentence. zoom_region zw=75 (brief on left half at scale 1.33×, dead space + panel on right); zy=2/zh=73 places highlight near comp vertical center."
+  }
+]

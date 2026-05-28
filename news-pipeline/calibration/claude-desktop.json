@@ -1,0 +1,35 @@
+{
+  "window": {
+    "x": 0,
+    "y": 0,
+    "width": 1710,
+    "height": 1107,
+    "mode": "fullscreen"
+  },
+  "claude_window_bounds": {
+    "X": 0.0,
+    "Height": 1073.0,
+    "Y": 34.0,
+    "Width": 1710.0
+  },
+  "pixel_scale": 2.0,
+  "mic_button": {
+    "center_logical": {
+      "x": 1198,
+      "y": 1044
+    },
+    "radius_logical": 30,
+    "idle_crop": "calibration/send-idle.png"
+  },
+  "stop_button": {
+    "center_logical": {
+      "x": 1109,
+      "y": 1044
+    },
+    "radius_logical": 30,
+    "streaming_crop": "calibration/send-streaming.png"
+  },
+  "same_location": false,
+  "verified_mean_diff": null,
+  "calibrated_at": "2026-05-22T16:39:24+0800"
+}

@@ -1,0 +1,69 @@
+{
+  "video": "screen recordings/V1/1vid_scrubbed.mp4",
+  "time_range": [
+    19.0,
+    46.0
+  ],
+  "region_pct": [
+    80.0,
+    0.0,
+    20.0,
+    30.0
+  ],
+  "expected_ticks": 6,
+  "fps_sample": 30,
+  "suppress_seconds": 0.8,
+  "tail_seconds": 1.0,
+  "ticks": [
+    {
+      "index": 0,
+      "t_tick": 19.4,
+      "magnitude": 0.39,
+      "tail_start": 18.4,
+      "tail_end": 20.4
+    },
+    {
+      "index": 1,
+      "t_tick": 20.9,
+      "magnitude": 10.51,
+      "tail_start": 19.9,
+      "tail_end": 21.9
+    },
+    {
+      "index": 2,
+      "t_tick": 27.033,
+      "magnitude": 11.84,
+      "tail_start": 26.033,
+      "tail_end": 28.033
+    },
+    {
+      "index": 3,
+      "t_tick": 34.7,
+      "magnitude": 10.67,
+      "tail_start": 33.7,
+      "tail_end": 35.7
+    },
+    {
+      "index": 4,
+      "t_tick": 38.167,
+      "magnitude": 2.85,
+      "tail_start": 37.167,
+      "tail_end": 39.167
+    },
+    {
+      "index": 5,
+      "t_tick": 43.667,
+      "magnitude": 0.32,
+      "tail_start": 42.667,
+      "tail_end": 44.667
+    }
+  ],
+  "ffmpeg_trim_ranges": [
+    "18.400:20.400",
+    "19.900:21.900",
+    "26.033:28.033",
+    "33.700:35.700",
+    "37.167:39.167",
+    "42.667:44.667"
+  ]
+}

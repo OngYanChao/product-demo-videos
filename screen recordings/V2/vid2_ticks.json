@@ -1,0 +1,52 @@
+{
+  "video": "screen recordings/V2/vid2.mp4",
+  "time_range": [
+    30.7,
+    139.37
+  ],
+  "region_pct": [
+    80.0,
+    0.0,
+    20.0,
+    30.0
+  ],
+  "expected_ticks": 3,
+  "fps_sample": 30,
+  "suppress_seconds": 0.8,
+  "tail_seconds": 1.0,
+  "compress_threshold": 2.0,
+  "margin": 1.0,
+  "ticks": [
+    {
+      "index": 0,
+      "t_tick": 31.7,
+      "magnitude": 7.79,
+      "tail_start": 30.7,
+      "tail_end": 32.7
+    },
+    {
+      "index": 1,
+      "t_tick": 57.767,
+      "magnitude": 10.43,
+      "tail_start": 56.767,
+      "tail_end": 58.767
+    },
+    {
+      "index": 2,
+      "t_tick": 138.367,
+      "magnitude": 13.56,
+      "tail_start": 137.367,
+      "tail_end": 139.367
+    }
+  ],
+  "ffmpeg_keep_ranges": [
+    "30.700:32.700",
+    "56.767:58.767",
+    "137.367:139.370"
+  ],
+  "ffmpeg_trim_ranges": [
+    "30.700:32.700",
+    "56.767:58.767",
+    "137.367:139.367"
+  ]
+}

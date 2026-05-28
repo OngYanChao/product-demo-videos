@@ -1,0 +1,15 @@
+# Claude process — 2 window(s)
+
+## Window 1
+[AXWindow]
+
+## Window 2
+[AXWindow] title=Claude
+  [AXGroup] title=Claude
+    [AXGroup]
+      [AXGroup]
+        [AXGroup]
+          [AXGroup]
+            [AXGroup]
+            [AXGroup]
+              [AXGroup]

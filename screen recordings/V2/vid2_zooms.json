@@ -1,0 +1,99 @@
+[
+  {
+    "id": "z0_prompt_typing",
+    "mode": "follow",
+    "source_t": 0.0,
+    "duration": 8.5,
+    "ease": 1.5,
+    "zoom": 1.5,
+    "region_pct": [40, 24, 38, 11],
+    "_beat": "Beat 1 Open — z0 follow-zoom on chat input box during prompt typing. Held 1.5-7.0 (typing + cursor-to-button + click), ease-out 7.0-8.5 STARTS at T_click=7.0 per Hard Rule #22 — camera held through the click, then retracts during loading initiation (first 1.5s of sidebar appearing). Duration = T_click + ease_out = 7.0 + 1.5 = 8.5s."
+  },
+  {
+    "id": "z0b_progress_sidebar",
+    "mode": "follow",
+    "source_t": 11.85,
+    "duration": 7.0,
+    "ease": 1.0,
+    "zoom": 2.5,
+    "region_pct": [80, 0, 20, 30],
+    "_beat": "Loading segment — z0b follow-zoom on top-right Progress sidebar. Per decisions/2026-05-24-z0b-starts-on-checklist.md (Hard Rule #23 refined): source_t = zone-b start = T_first_tick − margin = 12.85 − 1.0 = 11.85 (the scrubbed-t where the full 6-item checklist first becomes visible). Ease = margin = 1.0 so ease-in completes exactly at T_first_tick (12.85). Held 12.85 — 17.85 (5s: 3 progress ticks fire at scrubbed 12.85 / 14.85 / 16.85). Ease-out STARTS at T_(N-1) + margin = 17.85. Duration = (T_(N-1) + margin) − source_t + ease_out = 7.0s."
+  },
+  {
+    "id": "z1a_composite",
+    "mode": "annotate",
+    "source_t": 27.0,
+    "duration": 3.0,
+    "zoom_region_pct": [20, 25, 75, 75],
+    "highlight_region_pct": [27.0, 51.24, 43.0, 8.06],
+    "callout_number": 1,
+    "wait_cursor_clear": true,
+    "_beat": "z1a — Total/Composite row (5.6/10 Fair). VO: 'Composite at five-point-six. Fair.' Per decisions/2026-05-25-spotlight-vertical-safe-zone.md (Hard Rule #17 refined): all 4 sub-annotates z1a-z1d SHARE source_t=27.0 (static frame, no scroll) + SHARE zoom_region [20, 25, 75, 75] — camera stays held throughout the cluster, only spotlight moves between rows. Eliminates mid-scroll jitter from the prior 32.10/32.26/32.40/32.62 design. Comp y for Total = (55.27-25)/75 × 100 = 40.4% ✓ in 30-70 safe zone. Highlight snapped via measure_highlight.py — h=8.06 covers Total + '(composite)' wrap row."
+  },
+  {
+    "id": "z1b_quality",
+    "mode": "annotate",
+    "source_t": 27.0,
+    "duration": 3.5,
+    "zoom_region_pct": [20, 25, 75, 75],
+    "highlight_region_pct": [27.0, 60.98, 43.0, 2.09],
+    "callout_number": 1,
+    "wait_cursor_clear": true,
+    "_beat": "z1b — Quality row (10/10, representative of Q+D+T pinned-at-ten cluster). VO: 'Quality at ten. Defensive and Tactical, the same.' Shared source_t + zoom_region with z1a. Comp y for Quality = (62.0-25)/75 × 100 = 49.3% ✓. Highlight measured."
+  },
+  {
+    "id": "z1c_value",
+    "mode": "annotate",
+    "source_t": 27.0,
+    "duration": 3.0,
+    "zoom_region_pct": [20, 25, 75, 75],
+    "highlight_region_pct": [27.0, 64.75, 43.0, 8.01],
+    "callout_number": 1,
+    "wait_cursor_clear": true,
+    "_beat": "z1c — Value row (3/10, expensive P/E 34). VO: 'Value, three. P/E thirty-four. Expensive.' Shared source_t + zoom_region with z1a. Comp y for Value center = (68.76-25)/75 × 100 = 58.3% ✓ in safe zone. Highlight measured (Value spans 2 lines: 'Expensive: P/E 34.2 vs Dell 13.2, WDC 12.3 — premium to peers on every multiple')."
+  },
+  {
+    "id": "z1d_momentum",
+    "mode": "annotate",
+    "source_t": 27.0,
+    "duration": 3.0,
+    "zoom_region_pct": [20, 25, 75, 75],
+    "highlight_region_pct": [27.0, 70.5, 43.0, 2.0],
+    "callout_number": 1,
+    "wait_cursor_clear": true,
+    "_beat": "z1d — Momentum row (6/10, cooling). VO: 'Momentum cooled. Ten to six.' Shared source_t + zoom_region with z1a. Comp y for Momentum = (71.5-25)/75 × 100 = 62.0% ✓ in safe zone. Highlight hand-set (measure_highlight.py snap latched onto adjacent Value+Defensive rows since text rows are vertically contiguous in the table; debug-overlay confirmed the row is at y=70.5, h≈2)."
+  },
+  {
+    "id": "z2a_composite_trajectory",
+    "mode": "annotate",
+    "source_t": 34.0,
+    "duration": 3.0,
+    "zoom_region_pct": [20, 2, 75, 75],
+    "highlight_region_pct": [27.0, 31.0, 43.0, 16.0],
+    "callout_number": 2,
+    "wait_cursor_clear": true,
+    "_beat": "Beat 3 Trajectory — z2a covers '52-Week Trajectory' header + range-bound-and-noisy paragraph + May-Jun 2025 bullet (where '8.4' first appears). VO: 'Eight-point-four to five-point-six over the past year.' Per decisions/2026-05-25-highlight-three-tier-band.md: this is tier 2 (header + paragraph conceptual unit ≈ 16% tall) — single spotlight widened from the prior header-only to cover the whole unit. Source_t=34.0 places the unit's center at source y≈39%; zoom_region y_offset=2 lands the spotlight near composition vertical center per Hard Rule #17. Shared panel ap2 across z2a + z2b per Hard Rule #24's shared-panel allowance."
+  },
+  {
+    "id": "z2b_quality_flat",
+    "mode": "annotate",
+    "source_t": 35.0,
+    "duration": 3.0,
+    "zoom_region_pct": [20, 7, 75, 75],
+    "highlight_region_pct": [27.0, 43.5, 43.0, 3.0],
+    "callout_number": 2,
+    "wait_cursor_clear": true,
+    "_beat": "Beat 3 Trajectory — z2b covers the 'Quality — flat at 10 the entire year. Unshakeable.' line in the 'Read on the pillars individually' section. VO: 'Quality stayed flat at ten. The composite reset; the business held.' Per decisions/2026-05-25-highlight-three-tier-band.md: tier 1 (specific phrase, h=3%). Source_t=35.0 places the Quality line at source y≈44.5%; zoom_region y_offset=7 centers the spotlight per Hard Rule #17. Shared panel ap2 (callout=2) continues from z2a — same shared panel pinned across both sub-spotlights."
+  },
+  {
+    "id": "z3_bottom_line",
+    "mode": "annotate",
+    "source_t": 40.65,
+    "duration": 3.0,
+    "zoom_region_pct": [20, 16, 75, 75],
+    "highlight_region_pct": [27.0, 43.83, 43.0, 18.87],
+    "callout_number": 3,
+    "wait_cursor_clear": true,
+    "_beat": "Beat 5 Bottom Line — covers 'Bottom Line' header + the full verdict paragraph (4 lines). VO: 'Paying up for quality at a moment of multiple compression. Re-run tomorrow, same number.' Per decisions/2026-05-25-highlight-three-tier-band.md: tier 2 (header + paragraph conceptual unit ≈ 18.87% tall, within the 15-25% relaxed-tight band). Widened from prior header-only — matches the paired bare-callout panel (ap3 has no body), so the wider spotlight reads as the source content the viewer should read. Source_t=40.65 places the unit's center at source y≈53%; zoom_region y_offset=16 centers the spotlight per Hard Rule #17."
+  }
+]

@@ -1,0 +1,86 @@
+{
+  "input": "screen recordings/V1/1vid.mp4",
+  "output": "screen recordings/V1/1vid_scrubbed.mp4",
+  "raw_duration": 207.05,
+  "scrubbed_duration": 71.8,
+  "compression_ratio": 0.653,
+  "freezes": [
+    {
+      "start": 7.22,
+      "end": 29.73,
+      "duration": 22.5,
+      "treatment": "uniform_speedup"
+    },
+    {
+      "start": 34.58,
+      "end": 53.4,
+      "duration": 18.82,
+      "treatment": "tapered_with_cut"
+    },
+    {
+      "start": 53.48,
+      "end": 59.63,
+      "duration": 6.15,
+      "treatment": "uniform_speedup"
+    },
+    {
+      "start": 59.63,
+      "end": 93.26,
+      "duration": 33.62,
+      "treatment": "tapered_with_cut"
+    },
+    {
+      "start": 94.51,
+      "end": 137.51,
+      "duration": 43.0,
+      "treatment": "tapered_with_cut"
+    },
+    {
+      "start": 140.01,
+      "end": 151.01,
+      "duration": 11.0,
+      "treatment": "uniform_speedup"
+    },
+    {
+      "start": 164.96,
+      "end": 189.21,
+      "duration": 24.25,
+      "treatment": "tapered_with_cut"
+    }
+  ],
+  "config": {
+    "diff_threshold": "-45dB",
+    "min_dead_seconds": 5.0,
+    "cut_threshold_scrub": 4.0,
+    "anchor_seconds_scrub": 1.5,
+    "cut_threshold_raw_override": null,
+    "anchor_seconds_raw_override": null,
+    "anchor_speed": 2.0,
+    "force_uniform_starts": [
+      7.2
+    ],
+    "clip_freeze_end": {},
+    "drop_starts": [],
+    "drop_ranges": [],
+    "cursor_aware": true,
+    "cursor_force_uniform_per_freeze": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ],
+    "force_speed_ranges": [],
+    "multiply_speed_ranges": [],
+    "min_speed_ranges": [
+      [
+        7.2,
+        193.8,
+        3.0
+      ]
+    ],
+    "max_speed": 2.0
+  }
+}
