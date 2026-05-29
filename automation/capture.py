@@ -1748,7 +1748,7 @@ def main():
                   f"raw.mp4 + trimmed.mp4 + manifest.json")
             print(f"   Next (news): python3 news-pipeline/tools/process.py {slot.name}")
         else:
-            print(f"\n→ Done.  N{n}/raw.mp4 saved.")
+            print(f"\n→ Done.  {slot_label}/raw.mp4 saved.")
 
 
 if __name__ == "__main__":
