@@ -1,6 +1,6 @@
 ---
 name: news-pipeline
-description: Orchestrator for the news-reactive Cowork demo video pipeline (separate, experimental workflow living in news-pipeline/). Takes a natural-language use-case description from the team, generates a tailored portfolio when needed (using the Wong Family Trust as a template), drafts a Cowork prompt designed not to trigger clarification tools, and drives Claude desktop via tools/capture.py to record the resulting demo session. Use whenever the user says "make a news video about X," "generate a demo for [scenario]," "draft a portfolio for [use case]," "capture this prompt," or any request to produce a news-reactive Parallax demo video. Pipeline is fully separate from the main parallax-video skill — do not mix tools, templates, or files across them. Renderer/scrub for this stream is TBD (Phase 5+); current scope is Phases 1–4 (intake → portfolio → prompt → capture).
+description: Orchestrator for the news-reactive Cowork demo video pipeline (separate, experimental workflow living in news-pipeline/). Takes a natural-language use-case description from the team, generates a tailored portfolio when needed (using the Wong Family Trust as a template), drafts a Cowork prompt designed not to trigger clarification tools, and drives Claude desktop via automation/capture.py to record the resulting demo session. Use whenever the user says "make a news video about X," "generate a demo for [scenario]," "draft a portfolio for [use case]," "capture this prompt," or any request to produce a news-reactive Parallax demo video. Pipeline is fully separate from the main parallax-video skill — do not mix tools, templates, or files across them. Recording infrastructure (capture.py + calibrate.py) is shared via the automation/ layer; this skill owns news policy + post-processing via news-pipeline/tools/.
 ---
 
 # news-pipeline
@@ -14,18 +14,21 @@ The team describes a use case. You — Claude Code — orchestrate:
 1. **Intake** — parse the use case, decide what's needed
 2. **Portfolio** — generate or pick a portfolio (only if the use case benefits from one)
 3. **Prompt** — draft the Cowork prompt that will be typed into Claude desktop
-4. **Capture** — invoke `news-pipeline/tools/capture.py` via Bash to record
+4. **Capture** — invoke `automation/capture.py` via Bash to record
+5. **Process** — invoke `news-pipeline/tools/process.py` to scrub + tick-cut + zoom (was auto-chained inside capture.py pre-2026-05-29; capture.py is now workflow-agnostic and exits after producing raw.mp4 + trimmed.mp4 + manifest.json, so the news skill drives post-processing as a separate step)
 
-Phases 5+ (scrub / render / post) are not built yet. After capture, hand the raw recording back to the user with the manifest summary.
+After processing, hand the resulting `recordings/N<n>/zoom.mp4` back to the user with the manifest summary. `news-pipeline/tools/news_render.py` composes the final news video.
 
 ## Architecture
 
 | Layer | Where it lives | Notes |
 |---|---|---|
 | Pre-recording orchestration | This skill | Intake, portfolio synthesis, prompt drafting — **you do all of it inline**, no separate Python scripts needed |
-| Calibration (one-time) | `tools/calibrate.py` | Already run; produces `news-pipeline/calibration/claude-desktop.json` |
-| Recording | `tools/capture.py` | The only step requiring shell-out (drives Claude desktop + ffmpeg) |
-| Portfolio XLSX import | `tools/xlsx_to_portfolio.py` | For when a client provides a real `.xlsx` |
+| Calibration (one-time) | `automation/calibrate.py` | Already run; produces `automation/calibration/claude-desktop.json` (shared with other workflows that drive Claude desktop) |
+| Recording | `automation/capture.py` | Shared layer — drives Claude desktop + ffmpeg. Workflow-agnostic; exits after producing raw.mp4 + trimmed.mp4 + manifest.json |
+| Post-processing | `news-pipeline/tools/process.py` | News-specific orchestrator. Calls scrub.py + tick_cut.py + zoom.py + cap-dead. Applies Rules N1 + N2 |
+| Final compose | `news-pipeline/tools/news_render.py` | News Hyperframes renderer (title + recording + Polaris outro) |
+| Portfolio XLSX import | `news-pipeline/tools/xlsx_to_portfolio.py` | For when a client provides a real `.xlsx` |
 | Portfolio library | `news-pipeline/portfolios/<id>/` | Each portfolio is a subfolder with fixed-name files: `holdings.csv` + `summary.md` |
 | Prompt files | `news-pipeline/prompts/<id>.txt` | One file per use case; what capture.py types verbatim |
 | Recordings | `news-pipeline/recordings/N<n>/` | Auto-numbered; capture.py writes here |
@@ -38,7 +41,7 @@ The orchestration logic is **conversational**, not a script — when the user de
 2. **Embed portfolios inline in the prompt text.** Do not try to attach files via the `+` button — that's a separate UI automation we haven't built. Inline embedding is what `capture.py` types, and it looks natural in the recording.
 3. **Always check Claude desktop is in fullscreen mode** before running capture.py. Calibration coords are only valid in fullscreen. If it isn't, prompt the user to `ctrl+cmd+F` it.
 4. **Reuse existing portfolios when the use case fits.** Check `news-pipeline/portfolios/` for a match before generating a new one. Wong Family Trust is the seed template.
-5. **Don't mix with the main parallax-video skill.** This pipeline's files all live under `news-pipeline/`. Don't import scripts from `../tools/`, don't write to `../scripts/`, don't drop recordings into `../screen recordings/`.
+5. **Don't mix with the main parallax-video skill.** This pipeline's policy + content lives under `news-pipeline/`. Don't import (Python-level) from `../tools/` or `../automation/`; subprocess-invoke them via CLI instead. Don't write to `../scripts/`; don't drop recordings into `../screen recordings/`. Shared infrastructure (`tools/` + `automation/`) is invoked via subprocess only.
 6. **Capture.py runs unattended.** Once invoked, the user is told to leave keyboard/mouse alone. The script may take 30–600s depending on the response length.
 
 ## Phase 1 — Intake
@@ -107,14 +110,16 @@ Tell the user: "I'm about to record. Make sure Claude desktop is in fullscreen m
 **Default behavior: capture.py overwrites the highest existing `recordings/N<n>/` slot.** This means re-running for the same use case keeps iterating on the same N — no slot bloat from repeated attempts. The user explicitly says "move on" / "next batch" / "advance to a new recording" to advance.
 
 ```bash
-# Default — iterate on the current slot:
-python3 news-pipeline/tools/capture.py news-pipeline/prompts/<id>.txt
+# Default — iterate on the current slot. Two steps: capture, then post-process.
+python3 automation/capture.py news-pipeline/prompts/<id>.txt
+python3 news-pipeline/tools/process.py N<n>     # N<n> = the slot capture just wrote
 
 # When user confirms they want a fresh slot:
-python3 news-pipeline/tools/capture.py news-pipeline/prompts/<id>.txt --new-slot
+python3 automation/capture.py news-pipeline/prompts/<id>.txt --new-slot
+python3 news-pipeline/tools/process.py N<n+1>
 ```
 
-The capture script:
+The capture script (`automation/capture.py`):
 - Activates Claude desktop (Space switches in)
 - cmd+N → new task in Cowork
 - ffmpeg starts recording the full screen
@@ -123,10 +128,19 @@ The capture script:
 - Clicks the newly-created task in the Recents sidebar to navigate into it
 - Polls the calibrated stop-button region every 200ms
 - After 3 consecutive non-matches (~600ms), declares streaming ended
-- Stops ffmpeg, writes raw.mp4 + manifest.json
+- Scrolls chat to top + smooth scroll-down read-through (news-specific behavior — Pass 2 will make this opt-in via flag)
+- Stops ffmpeg, writes raw.mp4 + trimmed.mp4 + manifest.json
+- **Exits** — post-processing is the workflow's responsibility (no longer auto-chained as of 2026-05-29)
 
-When it finishes, surface to the user:
-- The path to `news-pipeline/recordings/N<n>/raw.mp4`
+The post-process script (`news-pipeline/tools/process.py`):
+- Reads `recordings/N<n>/manifest.json` for `phases.streaming_started` (Rule N2)
+- Scrubs trimmed.mp4 via `tools/scrub.py` with the typing-window forced at 2× uniform speedup
+- Tick-cut via `news-pipeline/tools/tick_cut.py` (Progress-sidebar tick montage compression)
+- Applies zooms via `tools/zoom.py` if `zooms.json` present (or auto_zooms.json from tick_cut)
+- Caps dead-time per Rule N1 (max 1s freeze in post-tick region)
+
+When the chain finishes, surface to the user:
+- The path to `news-pipeline/recordings/N<n>/zoom.mp4` (or `raw.mp4` if process.py wasn't run)
 - Key manifest stats: duration, samples_streaming/idle (sanity check)
 - Any ffmpeg.log warnings if present
 
@@ -144,40 +158,42 @@ Trigger phrases (and the action):
 | "Draft a portfolio for [use case]" | Phase 2 only — generate portfolio, don't draft prompt or record |
 | "Draft a prompt for [portfolio + use case]" | Phase 3 only |
 | "Import this XLSX as a portfolio" | Run `tools/xlsx_to_portfolio.py <path>` via Bash |
-| "Re-calibrate" | Tell user to run `python3 news-pipeline/tools/calibrate.py` themselves (it's interactive — they have to read coords and switch Spaces) |
-| "Dump Claude's UI" / "the auto-allow isn't working" | Tell user to run `python3 news-pipeline/tools/diagnose_ui.py` while a permission dialog is showing |
+| "Re-calibrate" | Tell user to run `python3 automation/calibrate.py` themselves (it's interactive — they have to read coords and switch Spaces) |
+| "Dump Claude's UI" / "the auto-allow isn't working" | Tell user to run `python3 automation/dev/diagnose_ui.py` while a permission dialog is showing |
 
 ## File layout
 
 ```
-news-pipeline/
-├── README.md                         ← user-facing overview
-├── calibration/
-│   ├── claude-desktop.json           ← coord config + window bounds
+automation/                             ← shared layer (used by news AND product-demo)
+├── capture.py                          ← Claude-desktop driver + ffmpeg recorder
+├── calibrate.py                        ← one-time calibration
+├── calibration/                        ← shared calibration data
+│   ├── claude-desktop.json             ← coord config + window bounds
 │   ├── send-idle.png, send-streaming.png
 │   └── window_full.png, window_streaming.png
+└── dev/                                ← scroll/wake/flush diagnostic harnesses
+
+news-pipeline/
+├── README.md                           ← user-facing overview
 ├── portfolios/
-│   ├── README.md                     ← schema spec
+│   ├── README.md                       ← schema spec
 │   └── <id>/
 │       ├── holdings.csv
 │       └── summary.md
 ├── prompts/
-│   └── <id>.txt                      ← what capture.py types verbatim
+│   └── <id>.txt                        ← what capture.py types verbatim
 ├── recordings/
 │   └── N<n>/
 │       ├── raw.mp4
-│       ├── manifest.json             ← timing + tuning stats
+│       ├── trimmed.mp4
+│       ├── manifest.json               ← timing + tuning stats
+│       ├── zoom.mp4                    ← after process.py
+│       ├── final.mp4                   ← after news_render.py
 │       └── ffmpeg.log
-├── outputs/                          ← Phase 5+ (TBD)
+├── outputs/                            ← reserved for final-render outputs
 └── tools/
-    ├── calibrate.py
-    ├── capture.py
-    └── xlsx_to_portfolio.py
+    ├── process.py                      ← news's pipeline orchestrator (Rules N1+N2)
+    ├── tick_cut.py                     ← Progress-sidebar tick montage compression
+    ├── news_render.py                  ← news Hyperframes composer
+    └── xlsx_to_portfolio.py            ← portfolio XLSX importer
 ```
-
-## Phases NOT yet built
-
-- **Phase 5 — Scrub** — cutting Cowork loading dead-time from raw.mp4
-- **Phase 6 — Render** — composing the scrubbed recording into a final video with branding/titles
-
-When the user asks about these, tell them they're future work; for now, hand off the raw.mp4 and they can edit manually.

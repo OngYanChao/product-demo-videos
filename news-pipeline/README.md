@@ -4,13 +4,13 @@
 
 A *separate* workflow from the main product-demo pipeline. The idea: news event → LLM drafts a Parallax prompt → Claude desktop is driven via keystroke automation → output is captured → pipeline scrubs loading dead-time and renders a short demo video reacting to the news.
 
-This directory is **mostly isolated** from the rest of the project. No imports from `../tools/`, `../templates/`, `../.claude/` — the only coupling is that `process.py` invokes the main pipeline's `tools/scrub.py` and `tools/zoom.py` as **subprocesses** (no shared Python state). If the experiment doesn't pan out, `rm -rf news-pipeline/` still leaves the main pipeline untouched.
+This directory holds **news-specific** policy + content. It consumes two shared layers from the project root: `tools/` (scrub.py, zoom.py, detect_ticks.py, etc.) and `automation/` (capture.py, calibrate.py + calibration data — the Claude-desktop driver). Both shared layers are invoked as **subprocesses or direct CLI calls** — no Python-level imports across folder boundaries. If the news experiment doesn't pan out, `rm -rf news-pipeline/` still leaves both shared layers + the main product-demo pipeline untouched.
 
 ## Architecture (current)
 
 ```
 1. (optional) tools/draft_prompt.py    → LLM drafts a Parallax prompt (TBD)
-2. tools/capture.py                    → drive Claude desktop, record screen,
+2. automation/capture.py               → drive Claude desktop, record screen,
                                          detect end-of-streaming via the
                                          stop/mic dual-region match, scroll
                                          chat to top, smooth scroll-down
@@ -18,22 +18,29 @@ This directory is **mostly isolated** from the rest of the project. No imports f
                                          scroll-up segment
                                          → recordings/N<N>/raw.mp4
                                          → recordings/N<N>/trimmed.mp4
-3. tools/process.py                    → AUTO-RUNS at the end of capture.py:
-                                         scrubs trimmed.mp4 + (if zooms.json
-                                         present) applies zooms via the main
-                                         pipeline's scrub.py / zoom.py
+                                         → recordings/N<N>/manifest.json
+3. tools/process.py                    → news's pipeline orchestrator. Invoked
+                                         after capture.py by the news skill
+                                         (was auto-chained inside capture.py
+                                         pre-2026-05-29; capture.py is now
+                                         workflow-agnostic). Scrubs trimmed.mp4
+                                         + (if zooms.json present) applies
+                                         zooms via the project root's
+                                         tools/scrub.py + tools/zoom.py.
                                          → recordings/N<N>/zoom.mp4
                                          Standalone-callable for re-runs
                                          without re-recording (edit zooms.json
                                          and re-invoke process.py)
-4. tools/render.py (TBD)               → compose final news video
+4. tools/news_render.py                → compose final news video (Hyperframes;
+                                         title + recording + Polaris outro)
+                                         → recordings/N<N>/final.mp4
 ```
 
 ## End-of-streaming detection (dual-region stop-vs-mic)
 
 The detector watches BOTH the stop-button region (vs `send-streaming.png`) AND the mic region (vs `send-idle.png`) and decides by **which reference matches better** — not an absolute threshold. Earlier single-reference detection mis-read the post-streaming "Opus 4.7 ⌄ + mic" layout as still-streaming for ~130s because the mean diff stayed at 9.5 (below the 12.0 cutoff). The relative comparison flips the instant the mic appears, so the post-streaming sequence fires within ~1s of true end of output. With prompt detection the renderer never drifts into Chromium's deep-throttle state, so the synthetic scroll-up paints on the first try with no window-swap flush needed.
 
-A `reset_cowork_window()` helper (Cmd+H hide → reshow) is defined but currently unused — it's a parked backstop in case a future Cowork build introduces faster compositor throttling. A working-with-flush backup of `capture.py` is preserved at `tools/capture.py.bak-with-flush` for quick revert.
+A `reset_cowork_window()` helper (Cmd+H hide → reshow) is defined but currently unused — it's a parked backstop in case a future Cowork build introduces faster compositor throttling. A working-with-flush backup of `capture.py` is preserved at `automation/capture.py.bak-with-flush` for quick revert.
 
 ## Hard rules inherited from the main pipeline
 
@@ -86,8 +93,8 @@ By **glance, not by automation**. Anyone (including future-me) touching the news
 
 - [x] Install `cliclick`, verify `ffmpeg` avfoundation, verify Python PIL
 - [x] Install `pyobjc-framework-Quartz` (for window-ID lookup)
-- [x] `tools/calibrate.py` — fullscreen Claude, capture mic + stop button references via cross-Space window-ID capture
-- [ ] `tools/capture.py` — Phase 2
+- [x] `automation/calibrate.py` — fullscreen Claude, capture mic + stop button references via cross-Space window-ID capture
+- [x] `automation/capture.py` — drives Claude desktop + records (relocated to shared automation/ layer 2026-05-29)
 
 ## Manual setup (one-time)
 
@@ -118,7 +125,7 @@ Calibration stores both. Don't mix them.
 
 ```bash
 # from project root:
-python3 news-pipeline/tools/calibrate.py
+python3 automation/calibrate.py
 ```
 
 The script will:
