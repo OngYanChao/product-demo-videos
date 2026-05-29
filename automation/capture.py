@@ -29,6 +29,8 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
+import shutil
 import signal
 import subprocess
 import sys
@@ -1336,6 +1338,126 @@ def trim_segment(raw_path: Path, out_path: Path, cut_start_s: float, cut_end_s: 
         return False
 
 
+def _ffprobe_duration(video_path: Path) -> float:
+    """Return duration in seconds via ffprobe."""
+    out = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+         "-of", "default=noprint_wrappers=1:nokey=1", str(video_path)],
+        check=True, capture_output=True, text=True,
+    ).stdout.strip()
+    return float(out)
+
+
+def cap_post_streaming_deadtime(input_video: Path, streaming_ended_t: float,
+                                output_video: Path, max_dead_s: float = 1.0,
+                                search_window_s: float = 30.0) -> tuple[bool, float]:
+    """Hard Rule #26 failsafe: cap the post-streaming pre-scroll-up dead-time gap.
+
+    Normally `trim_segment` excises this window cleanly using
+    phases.streaming_ended → phases.scroll_to_top_done as boundaries. If that
+    trim couldn't run (scroll_to_top_done absent from phases, or trim_segment
+    itself errored), the gap survives in raw.mp4. This failsafe scans the
+    post-streaming window (streaming_ended_t to streaming_ended_t +
+    search_window_s) for a freeze >max_dead_s and caps it via ffmpeg
+    trim+concat.
+
+    Scope is intentionally narrow (Hard Rule #26):
+      - Targets ONE freeze near streaming_ended_t (the canonical dead-time gap)
+      - Does NOT touch typing pauses (pre-streaming), tick-window holds (during
+        streaming), annotate dwells (post-scroll, far after streaming_ended)
+      - If no freeze is found within the search window, copies input → output
+        unchanged (no-op)
+
+    Args:
+        input_video: typically raw.mp4
+        streaming_ended_t: phases.streaming_ended timestamp (anchor)
+        output_video: where to write the result (typically trimmed.mp4)
+        max_dead_s: cap target — freezes longer than this get clipped to this
+        search_window_s: how far past streaming_ended_t to look for the freeze
+
+    Returns:
+        (cap_applied: bool, capped_seconds: float)
+    """
+    # 1. ffmpeg freezedetect across the whole video — easier than restricting
+    #    to a window via -ss/-to (which would re-encode). The filter is cheap;
+    #    we just filter results by start time after parsing.
+    cmd = [
+        "ffmpeg", "-i", str(input_video),
+        "-vf", f"freezedetect=n=-45dB:d={max_dead_s}",
+        "-an", "-f", "null", "-",
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+
+    # 2. Parse freeze intervals from ffmpeg's stderr (freezedetect logs there).
+    freezes: list[tuple[float, float]] = []
+    start: float | None = None
+    duration = _ffprobe_duration(input_video)
+    for line in result.stderr.splitlines():
+        m_start = re.search(r"freeze_start:\s*([\d.]+)", line)
+        m_end = re.search(r"freeze_end:\s*([\d.]+)", line)
+        if m_start:
+            start = float(m_start.group(1))
+        elif m_end and start is not None:
+            freezes.append((start, float(m_end.group(1))))
+            start = None
+    if start is not None:
+        # Video ended mid-freeze
+        freezes.append((start, duration))
+
+    # 3. Find the first freeze starting in [streaming_ended_t,
+    #    streaming_ended_t + search_window_s] that's >max_dead_s long.
+    target: tuple[float, float] | None = None
+    for f_start, f_end in freezes:
+        if streaming_ended_t <= f_start <= streaming_ended_t + search_window_s:
+            if f_end - f_start > max_dead_s + 0.05:  # 50ms slack vs detector jitter
+                target = (f_start, f_end)
+                break
+
+    if target is None:
+        # No dead time to cap — just copy input → output so downstream gets a file
+        shutil.copy(input_video, output_video)
+        return False, 0.0
+
+    # 4. Build keep_ranges: keep [0, f_start + max_dead_s] + [f_end, end].
+    f_start, f_end = target
+    keep_ranges = [
+        (0.0, f_start + max_dead_s),
+        (f_end, duration),
+    ]
+
+    # 5. Apply trim+concat via ffmpeg
+    filter_parts = []
+    refs = []
+    for i, (s, e) in enumerate(keep_ranges):
+        filter_parts.append(
+            f"[0:v]trim=start={s:.3f}:end={e:.3f},setpts=PTS-STARTPTS[v{i}]"
+        )
+        refs.append(f"[v{i}]")
+    filter_parts.append(
+        f"{''.join(refs)}concat=n={len(keep_ranges)}:v=1:a=0[outv]"
+    )
+    filter_graph = ";".join(filter_parts)
+
+    ffmpeg_cmd = [
+        "ffmpeg", "-y", "-i", str(input_video),
+        "-filter_complex", filter_graph,
+        "-map", "[outv]",
+        "-c:v", "h264_videotoolbox",
+        "-b:v", "8000k",
+        "-pix_fmt", "yuv420p",
+        "-movflags", "+empty_moov+frag_keyframe+default_base_moof",
+        str(output_video),
+    ]
+    try:
+        subprocess.run(ffmpeg_cmd, check=True, capture_output=True)
+    except subprocess.CalledProcessError as e:
+        print(f"      ⚠️ failsafe cap failed: {e.stderr.decode(errors='replace')[-500:]}")
+        return False, 0.0
+
+    capped_s = (f_end - f_start) - max_dead_s
+    return True, capped_s
+
+
 def _region_diff(center: dict, radius: int, ref_rel: str, tmpdir: Path) -> float:
     """Screen-region screencap at `center`±radius (logical), diffed vs `ref_rel`.
 
@@ -1690,6 +1812,8 @@ def main():
         # out into a separate trimmed.mp4 alongside the raw for review.
         trimmed_mp4 = slot / "trimmed.mp4"
         trim_ok = False
+        cap_applied = False
+        cap_seconds = 0.0
         if (
             "streaming_ended" in phases and "scroll_to_top_done" in phases
             and not interrupted
@@ -1702,7 +1826,34 @@ def main():
             if trim_ok:
                 print(f"      ✓ Trimmed:         {trimmed_mp4.relative_to(REPO_ROOT)}")
             else:
-                print(f"      ⚠️ Trim failed; raw.mp4 still available as fallback.")
+                print(f"      ⚠️ Trim failed; falling through to Hard Rule #26 failsafe...")
+
+        # Hard Rule #26 failsafe — post-streaming pre-scroll-up dead-time cap.
+        # Fires when the auto-trim above couldn't run (scroll_to_top_done not
+        # marked, e.g. scroll dance failed) OR errored. Scope: caps ONE freeze
+        # >1s starting near streaming_ended_t. No-op if the trim succeeded
+        # (the window is already gone). No-op if --no-readthrough was passed
+        # (no window exists). No-op if no qualifying freeze found.
+        if (
+            not trim_ok
+            and "streaming_ended" in phases
+            and not interrupted
+            and not args.no_readthrough
+        ):
+            print(f"\n      [Hard Rule #26 failsafe] Scanning for post-streaming freeze >1s...")
+            cap_applied, cap_seconds = cap_post_streaming_deadtime(
+                raw_mp4, phases["streaming_ended"], trimmed_mp4, max_dead_s=1.0,
+            )
+            if cap_applied:
+                trim_ok = True
+                print(f"      ✓ Failsafe cap:    {trimmed_mp4.relative_to(REPO_ROOT)} "
+                      f"(-{cap_seconds:.2f}s capped)")
+            elif trimmed_mp4.exists():
+                # cap_post_streaming_deadtime copied input → output when no
+                # qualifying freeze found; treat as a successful (no-op) trim
+                # so downstream gets a usable trimmed.mp4.
+                trim_ok = True
+                print(f"      ✓ No dead time to cap; trimmed.mp4 = raw.mp4 contents.")
 
         # ---- Manifest (always written, even on interrupt) ----
         manifest = {
