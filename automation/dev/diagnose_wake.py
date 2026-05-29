@@ -49,9 +49,9 @@ Prereqs
 
 Usage
 -----
-  python3 news-pipeline/tools/diagnose_wake.py
-  python3 news-pipeline/tools/diagnose_wake.py --trials 5 --idle-seconds 10
-  python3 news-pipeline/tools/diagnose_wake.py --occlude-app "Visual Studio Code"
+  python3 automation/dev/diagnose_wake.py
+  python3 automation/dev/diagnose_wake.py --trials 5 --idle-seconds 10
+  python3 automation/dev/diagnose_wake.py --occlude-app "Visual Studio Code"
 """
 
 from __future__ import annotations

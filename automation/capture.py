@@ -21,7 +21,7 @@ Workflow:
  13. Write recordings/N<N>/raw.mp4 + manifest.json
 
 Usage:
-  python3 news-pipeline/tools/capture.py path/to/prompt.txt
+  python3 automation/capture.py path/to/prompt.txt
 """
 
 from __future__ import annotations
@@ -66,11 +66,14 @@ def _install_shutdown_handlers():
 _install_shutdown_handlers()
 
 # ---------- paths ----------
-REPO_ROOT = Path(__file__).resolve().parents[2]
-PIPELINE_ROOT = REPO_ROOT / "news-pipeline"
-CALIB_DIR = PIPELINE_ROOT / "calibration"
+REPO_ROOT = Path(__file__).resolve().parents[1]
+AUTOMATION_ROOT = REPO_ROOT / "automation"
+CALIB_DIR = AUTOMATION_ROOT / "calibration"
 CALIB_JSON = CALIB_DIR / "claude-desktop.json"
-RECORDINGS_DIR = PIPELINE_ROOT / "recordings"
+# Default recording slot directory. Defaults to news-pipeline's location for
+# backward compatibility — Pass 2 (Workflow A integration) will make this a
+# CLI arg so product-demo can target "screen recordings/V<N>/" instead.
+RECORDINGS_DIR = REPO_ROOT / "news-pipeline" / "recordings"
 
 # ---------- tuning ----------
 POLL_INTERVAL_S = 0.2          # 5×/sec polling rate
@@ -331,7 +334,7 @@ def load_calibration() -> dict:
     if not CALIB_JSON.exists():
         sys.exit(
             f"❌ No calibration at {CALIB_JSON.relative_to(REPO_ROOT)}\n"
-            f"   Run: python3 news-pipeline/tools/calibrate.py"
+            f"   Run: python3 automation/calibrate.py"
         )
     return json.loads(CALIB_JSON.read_text())
 
@@ -1347,7 +1350,7 @@ def _region_diff(center: dict, radius: int, ref_rel: str, tmpdir: Path) -> float
             ["screencapture", "-x", "-R", f"{x},{y},{w},{h}", str(sample)],
             check=True, capture_output=True,
         )
-        return mean_pixel_diff(sample, PIPELINE_ROOT / ref_rel)
+        return mean_pixel_diff(sample, AUTOMATION_ROOT / ref_rel)
     finally:
         sample.unlink(missing_ok=True)
 
@@ -1406,7 +1409,20 @@ def main():
     ap.add_argument("--new-slot", action="store_true",
                     help="Advance to a fresh N<n+1>/ slot. Without this, the script "
                          "overwrites the highest existing N<n>/ slot — iterating on "
-                         "the same recording until you explicitly move on.")
+                         "the same recording until you explicitly move on. "
+                         "Ignored if --slot-dir is passed.")
+    ap.add_argument("--slot-dir", type=str, default=None,
+                    help="Override the auto-numbered news-pipeline/recordings/N<n>/ slot. "
+                         "Pass a path (absolute or repo-relative) — e.g. \"screen "
+                         "recordings/V5\" — and capture.py will write raw.mp4 + "
+                         "manifest.json into that directory directly. Used by the "
+                         "product-demo workflow's automated Phase 2 mode.")
+    ap.add_argument("--no-readthrough", action="store_true",
+                    help="Skip the post-streaming wake + scroll-to-top + smooth-scroll-"
+                         "down + auto-trim sequence. When set, capture stops shortly "
+                         "after streaming ends and produces raw.mp4 only (no "
+                         "trimmed.mp4). Use for workflows that want the brief on screen "
+                         "in its final state without the news-style read-through.")
     args = ap.parse_args()
 
     # ---- Validate ----
@@ -1419,17 +1435,30 @@ def main():
     cfg = load_calibration()
 
     # ---- Slot ----
-    n, slot, mode = resolve_recording_slot(
-        new_slot=args.new_slot,
-        create=not args.dry_run,
-    )
+    if args.slot_dir:
+        # Explicit slot — product-demo workflow's path (or any caller that
+        # wants to bypass the auto-numbered N<n>/ convention).
+        slot = Path(args.slot_dir)
+        if not slot.is_absolute():
+            slot = REPO_ROOT / slot
+        if not args.dry_run:
+            slot.mkdir(parents=True, exist_ok=True)
+        n = slot.name
+        mode = "explicit"
+    else:
+        n, slot, mode = resolve_recording_slot(
+            new_slot=args.new_slot,
+            create=not args.dry_run,
+        )
     raw_mp4 = slot / "raw.mp4"
     manifest_path = slot / "manifest.json"
     mode_label = {
         "new": "new slot",
         "overwrite": "OVERWRITING — pass --new-slot to advance",
+        "explicit": f"explicit slot ({args.slot_dir})",
     }[mode]
-    print(f"\n→ recording slot: N{n}  [{mode_label}]  ({slot.relative_to(REPO_ROOT)})")
+    slot_label = n if isinstance(n, str) else f"N{n}"
+    print(f"\n→ recording slot: {slot_label}  [{mode_label}]  ({slot.relative_to(REPO_ROOT)})")
     print(f"→ prompt file:    {args.prompt_file}")
     print(f"→ prompt ({len(prompt_text)} chars):")
     for line in prompt_text.splitlines()[:5]:
@@ -1606,10 +1635,19 @@ def main():
                         freeze_stop = start_freeze_watchdog(tmpdir)
                         print(f"      [freeze-watchdog] armed (abort after "
                               f"{FREEZE_WATCHDOG_TIMEOUT_S}s of zero screen change)")
-                        # Post-streaming sequence (wake → scroll-to-top with
-                        # verify+retry → smooth scroll-down). Shared helper so the
-                        # wake-retry fix lives in one place.
-                        run_post_streaming_scroll_sequence(tmpdir, mark)
+                        if args.no_readthrough:
+                            # Product-demo / non-news caller: stop shortly after
+                            # streaming ends. Brief settle so ffmpeg captures the
+                            # final brief state cleanly without the news-style
+                            # scroll dance.
+                            print(f"      [--no-readthrough] settling 1.0s then stopping recording...")
+                            time.sleep(1.0)
+                        else:
+                            # News default: post-streaming sequence (wake →
+                            # scroll-to-top with verify+retry → smooth scroll-
+                            # down). Shared helper so the wake-retry fix lives
+                            # in one place.
+                            run_post_streaming_scroll_sequence(tmpdir, mark)
                         break
                 if samples % 25 == 0:  # status every ~5s
                     elapsed = time.time() - started_at
@@ -1618,13 +1656,18 @@ def main():
                 time.sleep(POLL_INTERVAL_S)
             else:
                 print(f"      ⚠️  Hit MAX_RECORDING_S ({MAX_RECORDING_S}s). Cutting off.")
-                # Even on cutoff, run the full scroll-up + smooth-scroll-down
-                # sequence so the recording ends with a clean read-through.
                 mark("streaming_ended")
                 freeze_stop = start_freeze_watchdog(tmpdir)
                 print(f"      [freeze-watchdog] armed (abort after "
                       f"{FREEZE_WATCHDOG_TIMEOUT_S}s of zero screen change)")
-                run_post_streaming_scroll_sequence(tmpdir, mark)
+                if args.no_readthrough:
+                    # Even on cutoff, --no-readthrough means stop without scroll dance.
+                    print(f"      [--no-readthrough] settling 1.0s then stopping recording...")
+                    time.sleep(1.0)
+                else:
+                    # News default: run the full scroll-up + smooth-scroll-down
+                    # sequence so the recording ends with a clean read-through.
+                    run_post_streaming_scroll_sequence(tmpdir, mark)
         interrupted = False
     except KeyboardInterrupt:
         interrupted = True
@@ -1696,17 +1739,14 @@ def main():
             print(f"\n⚠️ Recording was interrupted — file is playable up to ~t={duration:.1f}s.")
             sys.exit(130)  # standard exit code for Ctrl+C
         if trim_ok:
-            # Auto-process: scrub the trimmed recording (+ zoom if zooms.json
-            # exists in the slot). trimmed.mp4 is preserved so the user can
-            # edit zooms.json and re-run process.py to iterate without re-recording.
-            from process import process_slot
-            try:
-                process_slot(slot)
-            except Exception as e:
-                print(f"\n[process] ⚠️ post-capture processing raised: "
-                      f"{type(e).__name__}: {e}")
+            # capture.py is workflow-agnostic — it produces raw.mp4 +
+            # trimmed.mp4 + manifest.json and exits. Each workflow's
+            # orchestrator decides what runs next (news: process.py +
+            # tick_cut + zoom; product-demo: Phase 3 scrub via the
+            # parallax-video skill). See automation/README.md.
             print(f"\n→ Done.  Files in {slot.relative_to(REPO_ROOT)}/: "
-                  f"raw.mp4 + trimmed.mp4 (+ zoom.mp4 / scrub report if processing succeeded).")
+                  f"raw.mp4 + trimmed.mp4 + manifest.json")
+            print(f"   Next (news): python3 news-pipeline/tools/process.py {slot.name}")
         else:
             print(f"\n→ Done.  N{n}/raw.mp4 saved.")
 

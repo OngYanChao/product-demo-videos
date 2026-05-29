@@ -11,7 +11,7 @@ HOW TO USE:
   2. Manually scroll the chat all the way DOWN.
   3. Make Cowork the visible app (full screen).
   4. From a terminal, run:
-       python3 news-pipeline/tools/test_scroll.py
+       python3 automation/dev/test_scroll.py
   5. The script will try 5 different scroll methods, one at a time, with
      a pause between each so you can watch.
   6. After each method, the chat should snap toward the top if the method

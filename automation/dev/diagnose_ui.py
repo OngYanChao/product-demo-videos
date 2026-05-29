@@ -7,9 +7,9 @@ USAGE:
   enumerate every accessible UI element, and print them — indented by depth,
   one element per line, with role + title + description.
 
-  python3 news-pipeline/tools/diagnose_ui.py
+  python3 automation/dev/diagnose_ui.py
 
-Output goes to stdout AND to news-pipeline/calibration/ui_dump.txt for later
+Output goes to stdout AND to automation/calibration/ui_dump.txt for later
 inspection. If a button isn't appearing in this dump, AppleScript can't see
 it — which means the UI is HTML inside the Electron WebContents view and we
 need pixel-based detection as a fallback.
@@ -23,7 +23,7 @@ import tempfile
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DUMP_PATH = REPO_ROOT / "news-pipeline" / "calibration" / "ui_dump.txt"
+DUMP_PATH = REPO_ROOT / "automation" / "calibration" / "ui_dump.txt"
 
 
 # AppleScript written as a regular triple-quoted raw string. Saved to a temp

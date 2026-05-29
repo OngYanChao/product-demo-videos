@@ -38,9 +38,9 @@ run (~3-4 min for all 5).
 
 Usage
 -----
-  python3 news-pipeline/tools/diagnose_flush.py
-  python3 news-pipeline/tools/diagnose_flush.py --idle-seconds 8 --occlude-app "Visual Studio Code"
-  python3 news-pipeline/tools/diagnose_flush.py --candidates 1 2
+  python3 automation/dev/diagnose_flush.py
+  python3 automation/dev/diagnose_flush.py --idle-seconds 8 --occlude-app "Visual Studio Code"
+  python3 automation/dev/diagnose_flush.py --candidates 1 2
 """
 
 from __future__ import annotations

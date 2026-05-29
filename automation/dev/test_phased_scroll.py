@@ -45,9 +45,9 @@ Prereqs
 
 Usage
 -----
-  python3 news-pipeline/tools/test_phased_scroll.py
-  python3 news-pipeline/tools/test_phased_scroll.py --idle-seconds 8
-  python3 news-pipeline/tools/test_phased_scroll.py --methods 3 4 5
+  python3 automation/dev/test_phased_scroll.py
+  python3 automation/dev/test_phased_scroll.py --idle-seconds 8
+  python3 automation/dev/test_phased_scroll.py --methods 3 4 5
 """
 
 from __future__ import annotations

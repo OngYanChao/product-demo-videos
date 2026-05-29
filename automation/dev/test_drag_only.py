@@ -8,7 +8,7 @@ crops of the chat region, then prints the diff so we can compare visually.
 
 PREREQUISITE: open Cowork with a long chat, scroll to the BOTTOM, leave
 Cowork visible. Then run:
-  python3 news-pipeline/tools/test_drag_only.py
+  python3 automation/dev/test_drag_only.py
 
 Output files:
   /tmp/drag_before.png   — full screen before the drag

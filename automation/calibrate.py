@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Calibrate Claude desktop for the news-pipeline.
+"""Calibrate Claude desktop for the shared automation layer.
 
-Phase 1 of the news-pipeline build. Run this ONCE before anything else
-(and re-run if you switch displays, theme, or Claude desktop is redesigned).
+Run this ONCE before any workflow that drives Claude desktop via
+capture.py (news-pipeline; product-demo automated Phase 2 once wired),
+and re-run if you switch displays, theme, or Claude desktop is redesigned.
 
 What it does:
   1. Activates Claude desktop and puts it in macOS fullscreen mode.
@@ -17,13 +18,13 @@ What it does:
   8. Saves calibration/claude-desktop.json + reference PNGs.
 
 Outputs:
-  news-pipeline/calibration/claude-desktop.json
-  news-pipeline/calibration/window_full.png
-  news-pipeline/calibration/send-idle.png        (microphone crop)
-  news-pipeline/calibration/send-streaming.png   (stop crop)
+  automation/calibration/claude-desktop.json
+  automation/calibration/window_full.png
+  automation/calibration/send-idle.png        (microphone crop)
+  automation/calibration/send-streaming.png   (stop crop)
 
 Usage:
-  python3 news-pipeline/tools/calibrate.py
+  python3 automation/calibrate.py
 """
 
 from __future__ import annotations
@@ -36,9 +37,9 @@ import time
 from pathlib import Path
 
 # ---------- paths ----------
-REPO_ROOT = Path(__file__).resolve().parents[2]
-PIPELINE_ROOT = REPO_ROOT / "news-pipeline"
-CALIB_DIR = PIPELINE_ROOT / "calibration"
+REPO_ROOT = Path(__file__).resolve().parents[1]
+AUTOMATION_ROOT = REPO_ROOT / "automation"
+CALIB_DIR = AUTOMATION_ROOT / "calibration"
 CALIB_JSON = CALIB_DIR / "claude-desktop.json"
 
 BTN_RADIUS = 30  # 60×60 logical-point crop around the button center
@@ -199,7 +200,7 @@ def banner(title: str):
 def main():
     CALIB_DIR.mkdir(parents=True, exist_ok=True)
 
-    banner("news-pipeline: Claude desktop calibration")
+    banner("automation: Claude desktop calibration")
     print(
         "One-time setup. This will activate Claude desktop and put it in\n"
         "macOS FULLSCREEN mode (its own Space). You'll calibrate against\n"
@@ -328,12 +329,12 @@ def main():
         "mic_button": {
             "center_logical": {"x": mic_x, "y": mic_y},
             "radius_logical": BTN_RADIUS,
-            "idle_crop": str(idle_png.relative_to(PIPELINE_ROOT)),
+            "idle_crop": str(idle_png.relative_to(AUTOMATION_ROOT)),
         },
         "stop_button": {
             "center_logical": {"x": stop_x, "y": stop_y},
             "radius_logical": BTN_RADIUS,
-            "streaming_crop": str(streaming_png.relative_to(PIPELINE_ROOT)),
+            "streaming_crop": str(streaming_png.relative_to(AUTOMATION_ROOT)),
         },
         "same_location": (mic_x, mic_y) == (stop_x, stop_y),
         "verified_mean_diff": round(diff, 2) if diff is not None else None,
@@ -343,7 +344,7 @@ def main():
 
     banner("Done")
     print(f"Calibration → {CALIB_JSON.relative_to(REPO_ROOT)}")
-    print(f"Next:        Phase 2 — tools/capture.py (TBD)")
+    print(f"Next:        python3 automation/capture.py <prompt-file>")
 
 
 if __name__ == "__main__":

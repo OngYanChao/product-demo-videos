@@ -17,7 +17,7 @@ PREREQUISITE:
   4. Keep Cowork visible.
 
 Then run:
-  python3 news-pipeline/tools/test_scroll_both.py
+  python3 automation/dev/test_scroll_both.py
 """
 
 from __future__ import annotations

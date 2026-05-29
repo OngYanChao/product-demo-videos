@@ -11,7 +11,7 @@ Auto-stops when chat content stops changing.
 
 PREREQUISITE: open Cowork with a long chat, scroll to the TOP, leave Cowork
 visible. Then run:
-  python3 news-pipeline/tools/test_smooth_scroll.py [pps]
+  python3 automation/dev/test_smooth_scroll.py [pps]
 
   pps = optional pixels-per-second speed override (default 300, same as
         the HammerSpoon default).
