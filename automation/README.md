@@ -1,6 +1,6 @@
 # automation/
 
-Shared Claude-desktop driving + screen-recording infrastructure. Workflow-agnostic — consumed as subprocess CLI calls by both the **news-pipeline** workflow and the **product-demo** workflow (once Pass 2 wires Phase 2 automated mode).
+Shared Claude-desktop driving + screen-recording infrastructure. Workflow-agnostic — consumed as subprocess CLI calls by both the **news-pipeline** workflow and the **product-demo** workflow (via the `"capture V<N>"` dispatch in `parallax-video/SKILL.md`).
 
 Extracted from `news-pipeline/tools/` on 2026-05-29 so the recording layer is no longer owned by one workflow.
 
@@ -8,7 +8,7 @@ Extracted from `news-pipeline/tools/` on 2026-05-29 so the recording layer is no
 
 | Path | Purpose |
 |---|---|
-| `capture.py` | The Claude-desktop driver. Reads a prompt from a text file, drives Claude desktop via cliclick keystrokes, starts an ffmpeg screen recording, detects end-of-streaming via dual-region stop-vs-mic match, optionally does a scroll-to-top + smooth scroll-down read-through (news visual language), auto-trims the scroll-up segment, writes `raw.mp4` + `trimmed.mp4` + `manifest.json` into the slot. **Exits when done** — post-processing is the workflow's responsibility. |
+| `capture.py` | The Claude-desktop driver. Reads a prompt from a text file, drives Claude desktop via cliclick keystrokes, starts an ffmpeg screen recording, detects end-of-streaming via dual-region stop-vs-mic match, runs the post-streaming read-through dance (scroll-to-top + smooth scroll-down at 300 px/s — captures the brief read-through for both news and product-demo workflows), auto-trims the scroll-up flicker segment, writes `raw.mp4` + `trimmed.mp4` + `manifest.json` into the slot. The `--no-readthrough` flag opts out of the scroll dance entirely (callers that just want the brief in its post-streaming state). **Exits when done** — post-processing is the workflow's responsibility. |
 | `calibrate.py` | One-time setup. Detects display + Retina scale, captures the bottom-bar mic + stop icons in idle vs streaming states, saves `calibration/claude-desktop.json`. Re-run when display / theme / Claude desktop changes. |
 | `calibration/` | Calibration data — `claude-desktop.json` (coords + window bounds) + reference PNGs (`send-idle.png`, `send-streaming.png`, `window_full.png`, `window_streaming.png`). |
 | `dev/` | Diagnostic + test harnesses developed alongside capture.py. Investigate Chromium wake throttling, scroll-event flush behavior, smooth-scroll cadence. Not part of the production pipeline; useful when capture.py breaks against a new Cowork build. |
@@ -43,7 +43,7 @@ If you find yourself adding a workflow-specific knob to capture.py (e.g., a `--m
 | `tuning` | object | Detector parameters (poll interval, debounce frames, framerate) |
 | `trimmed_file` | string \| null | Name of the trimmed.mp4 (if scroll-up trim succeeded), else null |
 
-### News-specific phase fields (only written when scroll-to-top + smooth-scroll-down dance ran)
+### Read-through phase fields (written when the scroll dance ran — default behavior)
 
 | Field | Meaning |
 |---|---|
@@ -51,12 +51,12 @@ If you find yourself adding a workflow-specific knob to capture.py (e.g., a `--m
 | `phases.smooth_scroll_chat_start` / `phases.smooth_scroll_chat_end` | Chat scroll-down read-through window |
 | `phases.smooth_scroll_doc_start` / `phases.smooth_scroll_doc_end` | Doc-panel scroll-down read-through window (if a doc was visible) |
 
-Pass 2 will gate this dance behind orthogonal CLI flags so product-demo can skip it. When that lands, these fields will be absent from product-demo captures.
+Both workflows (news + product-demo) capture with the scroll dance on by default. The fields are absent only when a caller explicitly passes `--no-readthrough`.
 
 ## Consumers
 
 - **news-pipeline** (today): `news-pipeline/tools/process.py` reads `phases.streaming_started` for Rule N2 (typing window speedup). The news skill (`.claude/skills/news-pipeline/SKILL.md`) invokes `automation/capture.py` then `news-pipeline/tools/process.py` as a 2-step Bash sequence.
-- **product-demo** (Pass 2, pending): Phase 3 scrub dispatch in `parallax-video/SKILL.md` will read `phases.streaming_started` as authoritative `T_typing_end` instead of frame-sampling. A new `"capture V<N>"` trigger in `parallax-video` will invoke `automation/capture.py` with product-demo-appropriate flags (no scroll-down dance).
+- **product-demo** (Pass 2, landed): Phase 3 scrub dispatch in `parallax-video/SKILL.md` reads `phases.streaming_started` as authoritative `T_typing_end` instead of frame-sampling. The `"capture V<N>"` trigger in `parallax-video` invokes `automation/capture.py` with `--slot-dir "screen recordings/V<N>"` (and the scroll-through read-through on, same as news — Phase 5.5 zoom freeze-frames during annotate panels). Post-renames `trimmed.mp4` → `vid<N>.mp4` (canonical Phase 3 input) and `raw.mp4` → `vid<N>_raw.mp4` (archival).
 
 ## Calibration
 
