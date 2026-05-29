@@ -158,6 +158,53 @@ The user does not need to invoke Phase 6a manually; it chains off Phase 5 and Ph
 
 **Convergence:** Phase 6a is idempotent — running it on a script that already passes all four checks produces no edits and returns "clean." After Phase 6a applies changes and triggers a re-render, the next Phase 6a run (auto-triggered by the re-render) should converge to clean within one or two passes. If Phase 6a keeps making edits across multiple iterations, that's a bug — investigate (likely a check that's misidentifying acceptable patterns as violations).
 
+**Hand-off to Phase 6b:** when Phase 6a returns "clean" (no edits applied this pass), the chain proceeds automatically to Phase 6b (lint). The polish phase has converged — the artifact is structurally consistent against its own frontmatter and the post-render timing. Phase 6b verifies it's also consistent against the project's Hard Rules.
+
+### Phase 6b — Mechanical lint (auto)
+
+**Input:** the converged script frontmatter (Phase 6a output) + zoom directives + scrub report + tick JSON + render manifest + ffprobe of the zoomed source recording.
+
+**Output:** a pass/warn/error report from the project's deterministic linter — one finding per violated Hard Rule, each citing the rule ID and a concrete diff hint.
+
+**What this phase is.** A deterministic, free, no-LLM mechanical check of every Hard Rule that's computable from project artifacts alone (framerate, keyframe density, panel-hold floor, safe-zone position, highlight tier, frontmatter timing sync, skeleton presence, z0b sizing, template-slot exhaustion, etc.). It's the project's contract test for its own pipeline — the assertion that the artifacts you're about to ship satisfy the rules the project has locked in.
+
+**Why this phase exists separately from Phase 6a.** Phase 6a's job is to make the script internally consistent against the rendered preview (the polish phase converges *the artifact against itself*). Phase 6b's job is to verify the artifact is consistent against *the project's Hard Rules*. These are different invariants — a script can be perfectly polished and still violate Hard Rule #15 (sparse keyframes) or Hard Rule #17 (safe-zone). Splitting them keeps the polish phase focused on rhythm/coverage/timing and the lint phase focused on rule conformance.
+
+**Auto-trigger contract — Phase 6b runs automatically after:**
+- Every Phase 6a "clean" convergence (the chain proceeds the moment polish has no more edits to make).
+- Every Phase 9 final render completion (the final artifact gets the same rule check as the preview).
+
+**Severity tiers:**
+- **Error-tier findings (Tier 1)** — violations of Hard Rules with concrete numeric thresholds that can be checked mechanically (framerate ≠ 60, keyframe interval > 1s, frontmatter timing drift > tolerance, panel hold < `min_hold` floor, safe-zone position outside 30–70%, highlight height > tier-2 cap, skeleton element missing, z0b sizing off, template slot referenced but undefined). These STOP the chain — do not proceed to Phase 6c.
+- **Warn-tier findings (Tier 2)** — softer violations or proxy checks for things the linter can't perfectly verify (banned-engineering-phrase substring match, slash-command-in-VO substring, capability-count pattern, draft-mode markers). The chain continues to Phase 6c; warnings are surfaced alongside the reviewer's findings in the final report.
+
+**Hand-off to Phase 6c:** if Phase 6b returns no error-tier findings, the chain proceeds automatically to Phase 6c (LLM review). If it returns *any* error-tier finding, the chain stops at 6b — surface findings to the user, do not run the reviewer.
+
+**Why lint gates the reviewer.** The LLM reviewer expects a well-formed input. Running R01 (subject-match) against a video whose annotate timings drifted out of sync with the rendered timeline produces garbage findings — the spotlight isn't where the panel says it should be, so every R01 reads "drift," but the root cause is L01 (timing sync), not a real subject-match failure. Lint-as-gate keeps the reviewer's findings actionable and saves the API spend that would otherwise be wasted on a broken artifact. Tier-1 == hard gate is the load-bearing convention.
+
+**Convergence:** Phase 6b is non-iterative. It runs once per Phase 6a convergence (or once per Phase 9 final). Findings are reported; the user (or upstream phases) act on them. There is no "Phase 6b applies its own fixes" — that would couple the linter to the artifact's mutation logic, which belongs in Phase 6a.
+
+### Phase 6c — Semantic review (auto)
+
+**Input:** the lint-passing artifact from Phase 6b (frontmatter, VO body, zoom directives, frames_used, the rendered preview or final).
+
+**Output:** a markdown review report at the project's per-video output path with the LLM's verdicts on the rules that require semantic judgment — subject-match between spotlight and panel, customer's-chair framing, panel-shape rotation, vault-stat integration, beat content visibility, hallucination check against frames_used.
+
+**What this phase is.** A vision-grounded LLM pass that catches the semantic failures the deterministic linter can't — does the spotlit area visually match what the panel pitches? Is panel copy in audience-perspective vocabulary? Do the panels rotate through capability/workflow/stakes shapes, or do three in a row land in the same mold? Does each `frames_used:` citation actually depict what the script claims it does? These are judgment calls — they require a model that can look at a frame, read the surrounding copy, and reason about whether the two cohere.
+
+**Why this phase exists separately from Phase 6b.** Lint is deterministic and free; reviewer is semantic and billed. Mixing them would either (a) couple the deterministic checks to the LLM round-trip's variance and cost, or (b) force the reviewer to do mechanical checks it's bad at (it would have to compute panel-hold floors and safe-zone percentages from scratch instead of just reading the linter's output). Separating them keeps the cheap pass cheap, makes the expensive pass narrowly-scoped, and gives the user a clean failure mode if the LLM call errors out (the lint result is still authoritative).
+
+**Auto-trigger contract — Phase 6c runs automatically after:**
+- Every Phase 6b pass (no error-tier findings). The chain fires whether the preceding render was a preview or a final.
+
+**Cost model.** The reviewer is billed per API call. The project caches responses by content hash so re-runs against unchanged input cost zero; the first run after a script body change or a re-render is the only billable case. Caching is a load-bearing optimization — without it, every Phase 6a convergence would re-bill the reviewer, which makes the auto-chain too expensive to leave on by default.
+
+**Severity tiers:** the reviewer reports findings as pass / drift / fail per rule. "Fail" means a concrete violation surfaced (e.g., R01 — the spotlight is illuminating a row the panel doesn't discuss). "Drift" means the LLM is unsure or sees partial misalignment. "Pass" means clear conformance. The chain doesn't auto-stop on reviewer findings — the report is surfaced to the user, who decides whether to re-open earlier phases.
+
+**Skip behavior:** the reviewer is the only billable step in the lint+review chain. Project-local: a `--no-review` flag (or equivalent skill-level opt-out) skips Phase 6c entirely for cost-sensitive iterations. The default is to run.
+
+**Convergence:** Phase 6c is non-iterative. It runs once per Phase 6b pass. Findings drive user-side action; the reviewer doesn't mutate the artifact.
+
 ## Hard rules
 
 These are non-negotiable across projects. Violations compound through the pipeline.
@@ -347,9 +394,13 @@ Concrete walk-through, with placeholder values. The project happens to be a Para
 
 6. **Phase 5.5.** Measure the precise pixel bounds for each zoom target, apply the two zooms (6s on beat 5, 4s on beat 6) via the project's zoom tool. Output: 56s zoomed recording. Re-derive LT/caption timings against this file (Hard Rule #12).
 
-7. **Phase 6.** Render preview (free) against the zoomed recording. Iterate. Render final (billed once).
+7. **Phase 6.** Render preview (free) against the zoomed recording. Iterate.
 
-The recording, the script, and the graphics all converged on the same canonical timeline because Phase 1 owned that timeline upstream of all of them, and Phase 5.5 zoom was sized from the beat sheet (Hard Rule #9) while targeted from the script (Hard Rule #5).
+8. **Phases 6a → 6b → 6c.** Polish converges (rhythm + sync); the chain auto-fires lint (mechanical Hard-Rule check) and then the LLM reviewer (semantic + vision-grounded). Lint gates the reviewer — error-tier findings stop the chain; tier-2 warnings carry through to the reviewer's report. Surface both reports; iterate Phase 5 / 5.5 / 6 based on findings.
+
+9. **Phase 9.** Render final (billed once). The 6a → 6b → 6c chain reattaches to the final artifact — the same rule checks apply to ship gates that applied to preview iterations.
+
+The recording, the script, and the graphics all converged on the same canonical timeline because Phase 1 owned that timeline upstream of all of them, and Phase 5.5 zoom was sized from the beat sheet (Hard Rule #9) while targeted from the script (Hard Rule #5). The 6a → 6b → 6c convergence verifies both internal consistency (polish) and external Hard-Rule conformance (lint + review) without re-coupling those concerns.
 
 ## Anti-patterns
 

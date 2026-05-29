@@ -1510,6 +1510,13 @@ def main():
                 print("         Claude may not have started responding. Continuing anyway.")
             else:
                 print("      ✓ Streaming started.")
+            # Boundary between the typing window and Cowork's response — drives
+            # rule N2 (news-pipeline/README.md): scrub.py must speedup-not-cut
+            # across [0, streaming_started]. Marked on both branches so the
+            # boundary is recorded even if stop-icon detection timed out
+            # (in which case "streaming_started" is the give-up moment, ~8s
+            # past true typing-end — speeding up the extra slack is fine).
+            mark("streaming_started")
 
             # ---- Poll until done ----
             print(f"\n[5/6] Polling for streaming-end "

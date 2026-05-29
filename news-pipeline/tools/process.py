@@ -41,6 +41,13 @@ NEWS_PIPELINE_ROOT = Path(__file__).resolve().parents[1]
 PROJECT_ROOT = NEWS_PIPELINE_ROOT.parent
 MAIN_TOOLS = PROJECT_ROOT / "tools"
 
+# Rule N2 (news-pipeline/README.md): the prompt-typing window must be sped up,
+# not cut. We derive the window end from manifest.phases.streaming_started and
+# shave a small safety margin so the forced-speedup range doesn't bleed into
+# the first frame of Cowork's response.
+TYPING_END_SAFETY_SHAVE_S = 0.5
+TYPING_SPEEDUP_FACTOR = 2.0
+
 
 def resolve_slot(arg: str) -> Path:
     """Accept 'N<num>' or a path to a slot directory."""
@@ -54,13 +61,61 @@ def resolve_slot(arg: str) -> Path:
     sys.exit(f"❌ slot not found: {arg}")
 
 
+def _derive_typing_force_range(slot_dir: Path,
+                               scrub_extra: list[str] | None,
+                               enabled: bool) -> str | None:
+    """Derive the rule-N2 --force-speed-range value from the slot's manifest.
+
+    Returns a string like "0:24.05:2.0" if streaming_started is available and
+    the user hasn't already passed their own --force-speed-range; otherwise
+    None (no auto-force; scrub.py keeps its default treatment).
+    """
+    if not enabled:
+        return None
+    # Defer to user override.
+    if any("--force-speed-range" in (a or "") for a in (scrub_extra or [])):
+        print("[process] rule N2: user passed --force-speed-range; honoring "
+              "their value (auto-derivation skipped)")
+        return None
+    manifest_path = slot_dir / "manifest.json"
+    if not manifest_path.exists():
+        print(f"[process] ⚠️ rule N2: {manifest_path.name} missing; can't derive "
+              f"typing window — scrub will use default treatment (may cut typing)")
+        return None
+    try:
+        manifest = json.loads(manifest_path.read_text())
+    except (json.JSONDecodeError, OSError) as e:
+        print(f"[process] ⚠️ rule N2: {manifest_path.name} unreadable "
+              f"({type(e).__name__}); skipping auto force-range")
+        return None
+    t = manifest.get("phases", {}).get("streaming_started")
+    if t is None:
+        # Older recordings (pre-2026-05-29 capture.py) won't have this key.
+        print(f"[process] ⚠️ rule N2: phases.streaming_started missing from manifest "
+              f"(likely a pre-N2 recording); scrub will use default treatment")
+        return None
+    try:
+        t_float = float(t)
+    except (TypeError, ValueError):
+        print(f"[process] ⚠️ rule N2: streaming_started={t!r} not a number; skipping")
+        return None
+    X = max(0.0, t_float - TYPING_END_SAFETY_SHAVE_S)
+    if X <= 0.05:
+        # Too small to matter — typing was instant or the safety shave ate the window.
+        return None
+    print(f"[process] rule N2: forcing typing window [0, {X:.2f}s] at "
+          f"{TYPING_SPEEDUP_FACTOR}× (streaming_started={t_float:.2f}s)")
+    return f"0:{X:.2f}:{TYPING_SPEEDUP_FACTOR}"
+
+
 def process_slot(slot_dir: Path,
                  scrub_extra: list[str] | None = None,
                  do_tick_cut: bool = True,
                  tick_tail_seconds: float | None = None,
                  tick_pre_seconds: float | None = "DEFAULT",
                  tick_post_seconds: float | None = "DEFAULT",
-                 cap_dead: bool = True) -> dict:
+                 cap_dead: bool = True,
+                 force_typing_speedup: bool = True) -> dict:
     """Run scrub → (optional) tick-cut → (optional) zoom on the slot's trimmed.mp4.
 
     Order per the V2 pattern (confirmed): scrub first compresses obvious
@@ -95,8 +150,17 @@ def process_slot(slot_dir: Path,
         return result
 
     # ── 1. scrub: dead-time frame-diff cut ───────────────────────────────
+    # Rule N2: derive the typing window from manifest.phases.streaming_started
+    # and pass --force-speed-range "0:X:2.0" so scrub.py uses uniform speedup
+    # (not tapered_with_cut) across the typing segment. User --scrub-arg with
+    # their own --force-speed-range overrides the auto value.
+    auto_force_range = _derive_typing_force_range(
+        slot_dir, scrub_extra, enabled=force_typing_speedup,
+    )
     print(f"\n[process] scrub: trimmed.mp4 → trimmed_scrubbed.mp4")
     cmd = ["python3", str(MAIN_TOOLS / "scrub.py"), str(trimmed)]
+    if auto_force_range:
+        cmd.extend(["--force-speed-range", auto_force_range])
     if scrub_extra:
         cmd.extend(scrub_extra)
     try:
@@ -227,6 +291,10 @@ def main():
     ap.add_argument("--no-cap-dead", action="store_true",
                     help="Disable the news-pipeline 1s dead-time hard cap on the "
                          "post-tick region of zoom.mp4 (decisions/2026-05-28-…).")
+    ap.add_argument("--no-typing-speedup", action="store_true",
+                    help="Disable rule N2's auto --force-speed-range over the typing "
+                         "window. Scrub will fall back to default treatment, which "
+                         "MAY cut typing (decisions/2026-05-29-…).")
     args = ap.parse_args()
     # Translate sentinel: CLI default None means 'tick_cut defaults'; negative means 'unbounded (None)'.
     def _norm(v):
@@ -239,7 +307,8 @@ def main():
                  tick_tail_seconds=args.tick_tail_seconds,
                  tick_pre_seconds=_norm(args.tick_pre_seconds),
                  tick_post_seconds=_norm(args.tick_post_seconds),
-                 cap_dead=not args.no_cap_dead)
+                 cap_dead=not args.no_cap_dead,
+                 force_typing_speedup=not args.no_typing_speedup)
 
 
 if __name__ == "__main__":
