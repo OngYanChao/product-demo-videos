@@ -107,7 +107,7 @@ Project rules are split across four homes — read the relevant one when working
 
 | Rule type | Home |
 |---|---|
-| **Portable video-production methodology** (beat sheet upstream, conform-not-compress, never-slow source, framerate consistency, cleanup gate, zoom sized by beat sheet, every claim cites a frame, overlay-ease-matches-camera, clean source segments between annotates, lint-gates-LLM-review, …) | `.claude/skills/video-production-workflow/SKILL.md` Hard Rules #1–#26 + Phases 6a / 6b / 6c |
+| **Portable video-production methodology** (beat sheet upstream, conform-not-compress, never-slow source, framerate consistency, cleanup gate, zoom sized by beat sheet, every claim cites a frame, overlay-ease-matches-camera, clean source segments between annotates, lint-gates-LLM-review, …) | `.claude/skills/video-production-workflow/SKILL.md` Hard Rules #1–#27 + Phases 6a / 6b / 6c |
 | **Parallax project decisions** (zoom at Phase 5.5, pragmatic mode, persona-overhaul, NL prompts in demo, Polaris closer, Highlights ownership, …) | `references/production-principles.md` (current-state rules) + `decisions/INDEX.md` (chronological event log — date-stamped, append-only) |
 | **Script craft** (voice composite, banned words, hallucination-check enforcement, value-framing rotation, vocabulary lock) | `.claude/skills/video-scriptwriting/SKILL.md` |
 | **Per-template format invariants** (layout positions, char/word limits, animation timings, fonts, watermark/avatar positions, locked taglines) | `templates/<family>/RENDER-GUIDE.md` |
@@ -165,7 +165,7 @@ All new locked-in decisions and rules are date-stamped and archived in `decision
 
 1. **Always** create the dated ADR in `decisions/YYYY-MM-DD-<slug>.md` and append a row to `decisions/INDEX.md` (newest at bottom).
 2. **Route the rule to its authoritative encoding site** per the routing table in `decisions/INDEX.md`:
-   - Portable methodology rule (phasing, ordering, framerate, conform-not-compress, overlay-ease, source-segment cleaning, etc.) → append as the next numbered Hard Rule in `.claude/skills/video-production-workflow/SKILL.md` (`## Hard rules` section, currently #1–#26).
+   - Portable methodology rule (phasing, ordering, framerate, conform-not-compress, overlay-ease, source-segment cleaning, etc.) → append as the next numbered Hard Rule in `.claude/skills/video-production-workflow/SKILL.md` (`## Hard rules` section, currently #1–#27).
    - Parallax project decision → next numbered Principle in `references/production-principles.md`.
    - Script craft → relevant section in `.claude/skills/video-scriptwriting/SKILL.md`.
    - Per-template invariant → that template's `templates/<family>/RENDER-GUIDE.md`.

@@ -652,9 +652,13 @@ SMOOTH_SCROLL_CHECK_INTERVAL_S = 0.6
 SMOOTH_SCROLL_UNCHANGED_THRESHOLD = 2.0
 SMOOTH_SCROLL_UNCHANGED_FRAMES_TO_STOP = 3
 # Brief holds at top + bottom so viewers register the start/end state.
-# Lowered from 2.0/2.5 — those were perceived as dead time in newsletter-pace
-# output. Keep them short but non-zero so the cut → scroll-down isn't jarring.
-POST_SCROLL_TOP_HOLD_S = 0.5
+# Top-hold raised to 1.0s on 2026-05-30 per Hard Rule #27 — the at-top brief
+# frame must be on screen for at least 1.0s after the scroll-up cut before
+# smooth-scroll-down begins, so the viewer registers "the brief is here, at
+# its top, ready to read." Phase 3 dispatch includes a freeze-frame failsafe
+# that catches recordings made before this default change (e.g. V3 captured
+# 2026-05-29 with 0.5s baked in).
+POST_SCROLL_TOP_HOLD_S = 1.0
 POST_SCROLL_BOTTOM_HOLD_S = 1.0
 
 
