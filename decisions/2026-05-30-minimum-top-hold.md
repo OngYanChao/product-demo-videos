@@ -1,43 +1,71 @@
-# 2026-05-30 — Minimum 1.0s top-hold pause before scroll-down (Hard Rule #27)
+# 2026-05-30 — Minimum 2.0s top-hold pause before scroll-down + scroll-to-prompt visibility (Hard Rule #27)
+
+**Refinement note:** This rule went through two same-day iterations. **Morning:** initial proposal at 1.0s minimum top-hold with capture-time + freeze-frame failsafe mechanisms. **Afternoon (after V3 visual review):** two issues surfaced — (1) the at-top frame didn't show the prompt at the top of the chat (scroll-to-top was stopping at the top of the *response* with the prompt off-screen above), and (2) even at 1.0s, the pause felt rushed for a frame that needs to register *both* the prompt and the brief together. Both refinements landed in this single ADR: duration floor raised to 2.0s; `automation/capture.py::scroll_chat_to_top()` raised from 80 to 200 events × 10 lines (= 2000 lines per target) to guarantee the chat is scrolled all the way past the prompt to the very top.
 
 **Scope:** Both pipelines, automated capture only (manual recordings handled at recording time by the human).
 
-**Affects:** `.claude/skills/video-production-workflow/SKILL.md` (new Hard Rule #27), `automation/capture.py` (`POST_SCROLL_TOP_HOLD_S` bumped from `0.5s` to `1.0s`), `.claude/skills/parallax-video/SKILL.md` (Phase 3 dispatch gains step 6b.5 — freeze-frame failsafe).
+**Affects:** `.claude/skills/video-production-workflow/SKILL.md` (Hard Rule #27 — two requirements: ≥2.0s hold + prompt visible in at-top frame), `automation/capture.py` (`POST_SCROLL_TOP_HOLD_S` bumped from `0.5s` to `2.0s`; `scroll_chat_to_top()` raised from 80 to 200 scroll events per target), `.claude/skills/parallax-video/SKILL.md` (Phase 3 dispatch step 6b.5 — freeze-frame failsafe using `freeze_s = 2.0 - natural_top_hold`).
 
 ## Decision
 
-The at-top brief frame — first visible after the scroll-up flicker is auto-trimmed — must be held for at least 1.0s before smooth-scroll-down begins. Editorial reason: viewer needs time to register "the brief is at its top, prompt visible, ready to read" before the camera starts moving down. Less than 1s reads as a jarring cut into mid-scroll; 1s or more lets the eye land and form expectation; the scroll-down then begins from a settled state.
+Two load-bearing requirements:
 
-## User observation (verbatim)
+**(a) Hold duration ≥ 2.0s.** The at-top frame — first visible after the scroll-up flicker is auto-trimmed — must be held for at least 2.0s before smooth-scroll-down begins. Calibrated against a *two-element* visual (prompt + brief-title together), not the single-element visual that 1.0s would suffice for.
 
-> "Do you see in V3 Scrub how after the output brief is finished loading there's a cut and then we cut into the output brief already scrolling down. Can I have a minimum one second pause at the top of the brief, So what I want for you to do is to have a 1 second pause freeze frame if you have to at the very top of the brief after we do the scroll up. so we do after the segment is downloading we do a cut to cut out the scroll up animation but we still want to keep one second minimum one second of pause time at the very top where you see the prompt and you see the brief in the chat before we start the scroll down"
+**(b) The at-top frame must show the prompt at the top of the chat.** `scroll_chat_to_top()` must reach the very top of the chat container so the user's first message (the prompt) is at the top of the captured frame, with the brief below it.
 
-The V3 test run surfaced this — V3 was captured 2026-05-29 with `POST_SCROLL_TOP_HOLD_S = 0.5s`, so after the auto-trim of the scroll-up dance, only 0.5s remained between scroll-to-top-done and smooth-scroll-chat-start. The viewer perceived this as cut-into-mid-scroll.
+## User observations
 
-## Implementation (two mechanisms — primary + failsafe)
+**First (morning):**
+> "Do you see in V3 Scrub how after the output brief is finished loading there's a cut and then we cut into the output brief already scrolling down. Can I have a minimum one second pause at the top of the brief, So what I want for you to do is to have a 1 second pause freeze frame if you have to at the very top of the brief after we do the scroll up... we still want to keep one second minimum one second of pause time at the very top where you see the prompt and you see the brief in the chat before we start the scroll down"
 
-**Primary: capture-time hold raised to 1.0s.** `automation/capture.py::POST_SCROLL_TOP_HOLD_S = 1.0` (was 0.5). All new captures bake the 1s pause natively. `manifest.phases.smooth_scroll_chat_start − scroll_to_top_done` will equal ~1.0s on captures from 2026-05-30 onward.
+**Second (afternoon, after seeing V3 regenerated at 1.0s):**
+> "It's not fully at the top, you are missing out on the prompt at the very top of the chat. Also can we extend the hold to 2 seconds? Add this under the hard rule"
 
-**Failsafe: Phase 3 freeze-frame injection.** For recordings made before this constant bump (V3 has the 0.5s baked in already), or any future case where the manifest indicates `natural_top_hold < 1.0s`, the Phase 3 dispatch's new step 6b.5 injects a freeze frame after the gap-cut and before scrub. Mechanism: extract the at-top frame, generate `freeze_s = 1.0 - natural_top_hold` of cloned-frame content via ffmpeg's `tpad=stop_mode=clone:stop_duration=<freeze_s>` filter, splice it into the gap-cut file at position `T_brief_landed_effective_gapcut`. Result: ≥1.0s held at-top regardless of when the recording was captured.
+The V3 1.0s output revealed two related issues: scroll didn't go high enough (prompt off-screen) AND 1.0s wasn't enough hold for the intended dual-element register. Both got addressed.
 
-## Why 1.0s
+## Why 2.0s (not 1.0s)
 
-Calibrated against the same reading-comprehension floor used in Hard Rule #25 (panel-hold minimum). Lower bound for "register a visual and form an expectation":
-- <1s feels cut-into (the original V3 condition the user objected to)
-- 1.0s feels settled-then-revealed
-- \>2s starts feeling like dead time before the read-through
+The 2.0s floor is calibrated against a *two-element* visual (prompt + brief-title together), not a single-element visual. The at-top frame after the scroll-up cut requires the viewer to:
 
-1.0s is the floor, not a target — natural top-hold can exceed 1s without issue. The bump from 0.5 to 1.0 in capture.py is just enough to clear the floor with no slack.
+1. **Read the prompt** — the persona's question in customer's-chair voice. (~0.7-1.0s)
+2. **Shift gaze to the brief** below and register "the response is here." (~0.5-0.8s)
+3. **Form expectation** before the scroll-down camera moves. (~0.2-0.5s)
 
-## Why both mechanisms
+Total: ~1.5-2.3s of comprehension work for a two-element scan. 2.0s sits in the middle.
 
-**Primary alone (capture-time bump)** would leave existing recordings broken — V3 already has 0.5s baked in; would need re-capture to fix. Re-capturing isn't always free (real Cowork API call, manual setup, time).
+- <1s feels cut-into (the original V3 condition that surfaced this rule)
+- 1.0s works if you're only looking at the brief, but rushed if you're meant to read the prompt too
+- 2.0s feels settled-then-revealed — the eye traces prompt → brief and the scroll-down begins from a registered state
+- \>3s starts feeling like dead time before the read-through
 
-**Failsafe alone (Phase 3 injection)** would mean every capture does extra work (freeze-frame ffmpeg call) when the underlying recording could just produce the right pause natively. Wasteful for the 99% case.
+2.0s is the floor, not a target — natural top-hold can exceed 2s without issue.
 
-**Together:** new captures get the 1s pause cheaply (native); old captures get retrofitted via failsafe. Both safety nets reinforce each other — if `POST_SCROLL_TOP_HOLD_S` ever drifts back to <1s (bug, accidental edit), Phase 3 catches it.
+## Why requirement (b): scroll all the way to the top
 
-## Scope
+The scroll-to-top function originally used 80 events × 10 lines = 800 lines of scroll per target. This worked for short briefs but for moderately long responses (V3 case — JPM peer snapshot with table + bullet points + several paragraphs of key takeaways), 800 lines wasn't enough to scroll past the response and reach the prompt above it. The at-top frame ended up showing the response title at the top, with the user's prompt still off-screen above.
+
+Bumped to 200 events × 10 lines = 2000 lines. At ~16-20px per line, that's ~32,000-40,000px of scroll-up — well past any conceivable response length. Excess events become no-ops once the chat hits its absolute top, so over-providing is safe.
+
+**Requirement (b) is not retrofitted by the Phase 3 freeze-frame failsafe** — if the recording didn't scroll high enough at capture time, freezing whatever frame WAS at the at-top moment still won't include the prompt. The fix has to happen at capture time. This means pre-2026-05-30 recordings (like V3) still won't have the prompt visible even after the failsafe extends the hold to 2.0s; they need re-capture for full Rule #27 conformance.
+
+## Implementation (three mechanisms)
+
+**Primary 1: scroll all the way to the top.** `automation/capture.py::scroll_chat_to_top()` raised from 80 to 200 scroll events per target. Ensures the chat container is fully scrolled past the response to the prompt at the top.
+
+**Primary 2: capture-time hold raised to 2.0s.** `automation/capture.py::POST_SCROLL_TOP_HOLD_S = 2.0` (was 0.5; briefly 1.0 same-day). New captures bake the 2s pause natively. `manifest.phases.smooth_scroll_chat_start − scroll_to_top_done` will equal ~2.0s on captures from 2026-05-30 onward.
+
+**Failsafe: Phase 3 freeze-frame injection.** For recordings made before these constant bumps (V3 has 0.5s baked in already), or any future case where `manifest.smooth_scroll_chat_start - scroll_to_top_done < 2.0s`, the Phase 3 dispatch's step 6b.5 injects a freeze frame after the gap-cut and before scrub. Mechanism: extract a 50ms slice at the at-top position, pad it via ffmpeg `tpad=stop_mode=clone:stop_duration=<freeze_s>` where `freeze_s = 2.0 - natural_top_hold`, splice into the gap-cut file at position `T_brief_landed_effective_gapcut`. Result: ≥2.0s held at-top regardless of recording age. **Limitation:** failsafe extends the *duration* but cannot fix the scroll-position — if the original recording's at-top frame didn't show the prompt, the failsafe-extended frame still won't.
+
+## Why both mechanisms (1.0 → 2.0 didn't change this)
+
+**Primary alone (capture-time bump)** leaves existing recordings broken — V3 already has 0.5s baked in; would need re-capture to fix. Re-capturing isn't always free (real Cowork API call, manual setup, time).
+
+**Failsafe alone (Phase 3 injection)** means every capture does extra work when the underlying recording could just produce the right pause natively. Wasteful for the 99% case.
+
+**Together:** new captures get the 2s pause cheaply (native); old captures get retrofitted via failsafe (duration only — scroll position can't be fixed retroactively).
+
+## Scope (unchanged from initial proposal)
 
 Applies to **automated captures with the readthrough scroll dance**: both pipelines (news + product-demo) since both invoke `automation/capture.py` with default flags (scroll dance on).
 
@@ -59,5 +87,5 @@ The 50ms slice (rather than a single frame) avoids precision issues with frame-a
 
 - Hard Rule #23 Variant B (the cut whose post-conditions Rule #27 enforces): `decisions/2026-05-29-automated-post-tick-cut.md`
 - Hard Rule #26 (sibling failsafe — post-streaming dead-time cap, same architecture pattern): `decisions/2026-05-29-post-streaming-deadtime-cap-global.md`
-- Hard Rule #25 (companion pause-floor rule, also 1.0s-anchored): `decisions/2026-05-25-annotate-panel-hold-minimum.md`
+- Hard Rule #25 (companion pause-floor rule): `decisions/2026-05-25-annotate-panel-hold-minimum.md`
 - V3 capture context (the canary that surfaced this): `screen recordings/V3/manifest.json` (2026-05-29 capture with 0.5s baked in)

@@ -652,13 +652,15 @@ SMOOTH_SCROLL_CHECK_INTERVAL_S = 0.6
 SMOOTH_SCROLL_UNCHANGED_THRESHOLD = 2.0
 SMOOTH_SCROLL_UNCHANGED_FRAMES_TO_STOP = 3
 # Brief holds at top + bottom so viewers register the start/end state.
-# Top-hold raised to 1.0s on 2026-05-30 per Hard Rule #27 — the at-top brief
-# frame must be on screen for at least 1.0s after the scroll-up cut before
-# smooth-scroll-down begins, so the viewer registers "the brief is here, at
-# its top, ready to read." Phase 3 dispatch includes a freeze-frame failsafe
-# that catches recordings made before this default change (e.g. V3 captured
-# 2026-05-29 with 0.5s baked in).
-POST_SCROLL_TOP_HOLD_S = 1.0
+# Top-hold raised to 2.0s on 2026-05-30 per Hard Rule #27 (refined twice the
+# same day: 0.5 → 1.0 → 2.0 after V3 visual review). The at-top frame —
+# showing the prompt at the very top of the chat AND the brief in the chat
+# area — must be on screen for at least 2.0s after the scroll-up cut before
+# smooth-scroll-down begins, so the viewer fully registers the question +
+# response landing together at the top before the read-through. Phase 3
+# dispatch includes a freeze-frame failsafe that catches recordings made
+# before this default change.
+POST_SCROLL_TOP_HOLD_S = 2.0
 POST_SCROLL_BOTTOM_HOLD_S = 1.0
 
 
@@ -699,8 +701,11 @@ def scroll_chat_to_top() -> None:
     confirmed the event payload is irrelevant when the window is visible; the
     real failure was the renderer being suspended, handled by the wake below.)
 
-    80 events × 10 lines per target = 800 lines worth of scroll-up, plenty
-    for any realistic conversation length.
+    200 events × 10 lines per target = 2000 lines worth of scroll-up
+    (raised from 80 on 2026-05-30 per Hard Rule #27 — V3 visual review showed
+    800 lines wasn't reaching the prompt at the very top of the chat for
+    moderately long briefs; the extra events are no-ops once the chat is
+    actually at top, so over-providing is safe).
 
     Pure scroll events — the caller is responsible for waking Cowork first
     (see scroll_to_top_with_verify), so the before/after verify snapshot can be
@@ -718,10 +723,10 @@ def scroll_chat_to_top() -> None:
             continue
         time.sleep(0.1)
 
-        # CGEvent scroll wheel, LINE units. 80 events × 10 lines positive
+        # CGEvent scroll wheel, LINE units. 200 events × 10 lines positive
         # delta = scroll up. Small inter-event delay so the OS treats these
         # as separate scroll ticks instead of coalescing.
-        for _ in range(80):
+        for _ in range(200):
             event = CGEventCreateScrollWheelEvent(
                 None, kCGScrollEventUnitLine, 1, 10
             )
