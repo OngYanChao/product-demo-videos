@@ -1,0 +1,9 @@
+Compare TSMC and Samsung Foundry as a 2026 semiconductor allocation. I want your full reasoning IN THE CHAT (not just in the document) — walk me through each dimension below with sources cited as you go.
+
+(1) Process node roadmap — explain the current state of TSMC N3 vs Samsung SF3, then the next-gen targets (TSMC N2/A16 vs Samsung SF2), timeline gaps, and the yield ramp risk. Cite earnings calls and recent investor day commentary.
+
+(2) Customer mix — name the top 5 customers for each foundry, walk through the concentration risk, and identify which marquee accounts each is winning or losing (Apple, Nvidia, Qualcomm, MediaTek). Pull recent customer-win or customer-loss news.
+
+(3) Margin trajectory — pull gross margin trend over the past 8 quarters for both companies, explain the structural drivers behind the gap, and project where each will be by end of 2026.
+
+After walking through all three dimensions in chat with your full reasoning, generate a side-by-side strategic comparison document covering all three dimensions plus a clear overweight recommendation, the catalyst calendar for the next 12 months, and the main risk to the call.

@@ -1,0 +1,38 @@
+{
+  "n": "V3",
+  "prompt_file": "/tmp/V3_prompt.txt",
+  "prompt_text": "Peer snapshot on JPM for sector brief \u2014 comp set, factor scores, valuation deltas.",
+  "started_at": "2026-05-29T15:30:21+0800",
+  "ended_at": "2026-05-29T15:32:49+0800",
+  "duration_s": 82.55,
+  "interrupted": false,
+  "samples_total": 35,
+  "samples_streaming": 32,
+  "samples_idle": 3,
+  "samples_failed": 0,
+  "allow_clicks": 1,
+  "claude_window_id": 55702,
+  "claude_window_bounds": {
+    "X": 0.0,
+    "Height": 1073.0,
+    "Y": 34.0,
+    "Width": 1710.0
+  },
+  "calibration_used": "automation/calibration/claude-desktop.json",
+  "phases": {
+    "streaming_started": 9.063,
+    "streaming_ended": 60.171,
+    "scroll_to_top_done": 67.651,
+    "smooth_scroll_chat_start": 68.154,
+    "smooth_scroll_chat_end": 72.913,
+    "smooth_scroll_doc_start": 72.913,
+    "smooth_scroll_doc_end": 75.404
+  },
+  "trimmed_file": "trimmed.mp4",
+  "tuning": {
+    "poll_interval_s": 0.2,
+    "end_detection": "stop-vs-mic relative match",
+    "debounce_frames": 3,
+    "framerate": 60
+  }
+}

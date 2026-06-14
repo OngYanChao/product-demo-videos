@@ -1,0 +1,3 @@
+Write a roughly 1000-word essay directly in this chat about why people procrastinate even when they know they shouldn't. Cover the psychological causes (fear of failure, perfectionism, decision fatigue, reward asymmetry), the neuroscience angle (prefrontal cortex vs limbic system, dopamine timing), and three practical strategies that actually work. Make it readable, with paragraphs.
+
+Important: write the essay DIRECTLY IN THE CHAT as flowing prose. Do NOT create a document, artifact, file, or any side panel output. No tools needed — just write the essay in the chat from your own knowledge. The whole point is to fill the chat with a long readable response.

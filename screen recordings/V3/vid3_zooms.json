@@ -1,0 +1,80 @@
+[
+  {
+    "id": "z0_prompt_typing",
+    "mode": "follow",
+    "source_t": 0.0,
+    "duration": 10.56,
+    "ease": 1.5,
+    "zoom": 1.5,
+    "region_pct": [
+      40,
+      24,
+      38,
+      11
+    ],
+    "_beat": "z0 \u2014 typing zoom (Rules #22, #28)."
+  },
+  {
+    "id": "z1a_jpm_row",
+    "mode": "annotate",
+    "source_t": 13.0,
+    "duration": 3.5,
+    "zoom_region_pct": [
+      22,
+      26,
+      56,
+      49
+    ],
+    "highlight_region_pct": [
+      28,
+      38,
+      42,
+      6
+    ],
+    "callout_number": 1,
+    "wait_cursor_clear": true,
+    "_beat": "z1a \u2014 JPM row (row 1, wrapped 2 lines). Source y=38-44 (h=6%, tier-1). Comp y range: (38-26)/49*100=24.5% to (44-26)/49*100=36.7%. Center comp 30.6% (safe zone)."
+  },
+  {
+    "id": "z1b_citigroup_row",
+    "mode": "annotate",
+    "source_t": 13.0,
+    "duration": 3.5,
+    "zoom_region_pct": [
+      22,
+      26,
+      56,
+      49
+    ],
+    "highlight_region_pct": [
+      28,
+      51,
+      42,
+      3.6
+    ],
+    "callout_number": 1,
+    "wait_cursor_clear": true,
+    "_beat": "z1b \u2014 Citigroup row (row 4, single line). Source y=51-54.6 (h=3.6%, tier-1). Center comp = (52.8-26)/49*100 = 54.7% (safe zone)."
+  },
+  {
+    "id": "z2_top_pick",
+    "mode": "annotate",
+    "source_t": 15.5,
+    "duration": 4.0,
+    "zoom_region_pct": [
+      22,
+      25,
+      56,
+      49
+    ],
+    "highlight_region_pct": [
+      28,
+      40,
+      50,
+      4
+    ],
+    "callout_number": 2,
+    "wait_cursor_clear": true,
+    "_beat": "z2 \u2014 Top pick by model bullet (wraps 2 lines: \"...combo, only money-center with positive YTD.\"). Source y=40-44 (h=4%, tier-1). Center comp = (42-25)/49*100 = 34.7% (safe zone)."
+  }
+]

@@ -1,0 +1,40 @@
+{
+  "input": "screen recordings/V3/vid3.mp4",
+  "output": "screen recordings/V3/vid3_scrubbed.mp4",
+  "raw_duration": 17.0,
+  "scrubbed_duration": 17.0,
+  "compression_ratio": 0.0,
+  "freezes": [
+    {
+      "start": 0.0,
+      "end": 7.1,
+      "duration": 7.1,
+      "treatment": "tapered_with_cut"
+    }
+  ],
+  "config": {
+    "diff_threshold": "-45dB",
+    "min_dead_seconds": 5.0,
+    "cut_threshold_scrub": 4.0,
+    "anchor_seconds_scrub": 1.5,
+    "cut_threshold_raw_override": null,
+    "anchor_seconds_raw_override": null,
+    "anchor_speed": 2.0,
+    "force_uniform_starts": [],
+    "clip_freeze_end": {},
+    "drop_starts": [],
+    "drop_ranges": [],
+    "cursor_aware": false,
+    "cursor_force_uniform_per_freeze": [],
+    "force_speed_ranges": [
+      [
+        0.0,
+        17.0,
+        1.0
+      ]
+    ],
+    "multiply_speed_ranges": [],
+    "min_speed_ranges": [],
+    "max_speed": 2.0
+  }
+}
