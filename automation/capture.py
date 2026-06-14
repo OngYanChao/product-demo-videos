@@ -637,6 +637,138 @@ def refresh_scroll_targets() -> None:
               f"cursors: chat=({chat_x},500) doc=({doc_x},500)")
     else:
         print(f"      [layout] boundary not detected; using fallback cursors")
+
+
+# Chat input box detection — finds the input box's horizontal extent by
+# scanning at the calibrated button y. Used to dynamically derive stop/mic
+# button positions when Cowork's layout shifts (doc panel opens, chat panel
+# narrows, input box shifts horizontally).
+#
+# Approach (per ground-truth diagnostic on N5 frame at t=53s):
+#  - Chat panel bg brightness: ~25-31  (uniformly dark)
+#  - Input box bg brightness: ~37-44   (a few units LIGHTER than chat bg)
+#  - Text/icons inside box: ~100-255   (white text, model selector, mic icon)
+#  - Antialiased edges: ~60-100         (also inside the box)
+# Simple one-sided threshold works: anything brighter than 33 is "inside the
+# box" (bg, text, or antialiased edges); anything ≤ 32 is chat bg (= outside
+# the box). We find the longest contiguous run of brightness ≥ 33 along the
+# calibrated button y; its left/right edges are the input box edges.
+#
+# Calibrated stop/mic x-offset (89 logical px) is preserved in the derived
+# coords — mic sits at box.right - CHAT_INPUT_BUTTON_OFFSET_X, stop sits
+# `calibrated_mic_x - calibrated_stop_x` px to the LEFT of mic. Y stays at
+# the calibrated value (only x shifts when layout changes).
+CHAT_INPUT_BUTTON_OFFSET_X = 30      # logical px: mic_x = box.right - this
+CHAT_INPUT_BOX_BRIGHTNESS_MIN = 33   # 0-255; ≥ this = inside box (bg/text/edge), < this = chat bg
+CHAT_INPUT_MIN_WIDTH_LOGICAL = 300   # box run shorter than this is likely noise (sidebar/divider/etc.)
+CHAT_INPUT_MAX_GAP_LOGICAL = 5       # tolerate tiny single-pixel chat-bg "gaps" caused by aliasing — but no more
+
+
+def find_chat_input_box(pixel_scale: float, button_y_logical: int) -> dict | None:
+    """Detect the chat input box's horizontal extent at the calibrated button y.
+
+    Returns a dict {left, right, center_y} in LOGICAL coords, or None if
+    not detected. Scans the row at button_y_logical for the longest run of
+    box-brightness pixels (35-50), tolerating brief interruptions from
+    text/icons (100+) inside the box.
+
+    Returning {left, right, center_y} only — we don't attempt to find
+    the box's vertical extent. The button y comes straight from calibration
+    (it doesn't change when layout shifts horizontally; the box's vertical
+    position is stable, only its horizontal position moves).
+    """
+    import tempfile
+    from PIL import Image
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
+            shot_path = f.name
+        subprocess.run(["screencapture", "-x", shot_path], check=True, capture_output=True)
+        img = Image.open(shot_path).convert("L")  # grayscale
+        Path(shot_path).unlink(missing_ok=True)
+    except (subprocess.CalledProcessError, OSError):
+        return None
+
+    width, height = img.size  # physical pixels
+    y_phys = int(button_y_logical * pixel_scale)
+    if y_phys < 0 or y_phys >= height:
+        return None
+    px = img.load()
+
+    min_run_phys = int(CHAT_INPUT_MIN_WIDTH_LOGICAL * pixel_scale)
+    max_gap_phys = max(2, int(CHAT_INPUT_MAX_GAP_LOGICAL * pixel_scale))
+
+    # Walk the row, tracking contiguous runs of brightness ≥ BOX_MIN. These
+    # are the "inside box" runs (box bg + text + edges). Outside the box is
+    # chat bg (brightness < BOX_MIN). Allow a few-px gap (aliasing tolerance)
+    # before declaring a run over.
+    runs: list[tuple[int, int]] = []
+    cur_start: int | None = None
+    cur_end: int = 0
+    gap = 0
+    for x in range(width):
+        if px[x, y_phys] >= CHAT_INPUT_BOX_BRIGHTNESS_MIN:
+            if cur_start is None:
+                cur_start = x
+            cur_end = x
+            gap = 0
+        else:
+            if cur_start is not None:
+                gap += 1
+                if gap > max_gap_phys:
+                    runs.append((cur_start, cur_end))
+                    cur_start = None
+                    gap = 0
+    if cur_start is not None:
+        runs.append((cur_start, cur_end))
+
+    valid = [(s, e) for s, e in runs if (e - s) >= min_run_phys]
+    if not valid:
+        return None
+    # Pick the LEFTMOST valid run. The chat input is always positioned to
+    # the LEFT of any document panel (doc panel only ever appears on the
+    # right). Picking the longest run would mistakenly select the doc panel
+    # whenever its content area (brightness ≥33, often the white doc
+    # background) extends as far as the chat input — which happens in N6-style
+    # two-pane layouts. Leftmost is unambiguous.
+    box_left_phys, box_right_phys = min(valid, key=lambda r: r[0])
+
+    def to_logical(p: int) -> int:
+        return int(p / pixel_scale)
+
+    return {
+        "left": to_logical(box_left_phys),
+        "right": to_logical(box_right_phys),
+        "center_y": button_y_logical,
+    }
+
+
+def derive_button_coords_from_input_box(box: dict, cfg: dict) -> dict | None:
+    """Compute dynamic stop/mic button center coords from detected input box.
+
+    Preserves the calibrated horizontal offset between stop and mic (typically
+    89 logical px — mic sits to the RIGHT of stop). Anchor: mic at
+    box.right - CHAT_INPUT_BUTTON_OFFSET_X; stop at mic_x - calibrated_offset.
+    Both use box.center_y (= the calibrated button y).
+
+    Returns None if cfg is missing the calibrated button entries.
+    """
+    if box is None:
+        return None
+    try:
+        cal_stop_x = cfg["stop_button"]["center_logical"]["x"]
+        cal_mic_x = cfg["mic_button"]["center_logical"]["x"]
+    except (KeyError, TypeError):
+        return None
+    stop_mic_offset = cal_mic_x - cal_stop_x  # = 89 in standard Cowork layout
+    mic_x = box["right"] - CHAT_INPUT_BUTTON_OFFSET_X
+    stop_x = mic_x - stop_mic_offset
+    button_y = box["center_y"]
+    return {
+        "stop_button": {"center_logical": {"x": stop_x, "y": button_y}},
+        "mic_button": {"center_logical": {"x": mic_x, "y": button_y}},
+    }
+
+
 END_OF_RECORDING_HOLD_S = 8.0  # seconds to hold view-at-top before stopping ffmpeg
 
 # Smooth scroll-down (HammerSpoon-style) settings.
@@ -733,6 +865,39 @@ def scroll_chat_to_top() -> None:
             CGEventPost(kCGHIDEventTap, event)
             time.sleep(0.015)
         time.sleep(0.4)
+
+
+def nudge_chat_to_bottom() -> None:
+    """Send a burst of scroll-down events at the chat panel to keep its
+    bottom edge visible during streaming. Critical so Cowork's in-chat
+    permission prompts (the "Allow" button that appears at the end of the
+    chat as new tool calls fire) stay in the visible frame — otherwise the
+    chat fills up, the prompt scrolls off-screen, auto-click can't find the
+    button via AX or OCR, and the pipeline stalls.
+
+    Negative delta = scroll down (opposite of scroll_chat_to_top's positive
+    delta = scroll up). Same CGEvent LINE-unit scroll mechanism — the only
+    method that reliably moves Cowork's chat container.
+
+    Lighter than scroll_chat_to_top (30 events × 10 lines = 300 lines of
+    catch-up) since we run this every ~1s and only need to absorb whatever
+    Cowork has appended since the last nudge.
+    """
+    from Quartz import CGEventCreateScrollWheelEvent, CGEventPost
+    from Quartz.CoreGraphics import kCGHIDEventTap, kCGScrollEventUnitLine
+
+    x, y = SCROLL_TARGETS_LOGICAL[0]  # chat panel scroll target
+    try:
+        subprocess.run(["cliclick", f"m:{x},{y}"], check=True)
+    except subprocess.CalledProcessError:
+        return
+    time.sleep(0.03)
+    for _ in range(30):
+        event = CGEventCreateScrollWheelEvent(
+            None, kCGScrollEventUnitLine, 1, -10  # negative = scroll DOWN
+        )
+        CGEventPost(kCGHIDEventTap, event)
+        time.sleep(0.01)
 
 
 def smooth_scroll_down(target_x: int, target_y: int, check_region: tuple[int, int, int, int],
@@ -1111,6 +1276,232 @@ def click_allow_button_via_ocr(wid: int, window_bounds: dict, scale: float,
     return f"OCR '{button_label}' @ ({logical_x},{logical_y})"
 
 
+def _find_option_1_coords(scale: float, tmpdir: Path,
+                          quiet: bool = False) -> tuple[int, int, str] | None:
+    """OCR full screen + return (logical_x, logical_y, option_text) for the
+    AskUserQuestion popup's option-1 row, or None if no popup detected.
+
+    Pure detection — does NOT click. Caller is responsible for the click +
+    any post-click verification (re-call this helper after a delay; if it
+    returns None, the popup is gone).
+    """
+    try:
+        import pytesseract
+        from PIL import Image
+    except ImportError:
+        if not quiet:
+            print(f"      [auq-debug] pytesseract import failed; aborting OCR")
+        return None
+
+    # Full-screen capture (NOT screencap_window). Cowork's AskUserQuestion
+    # popup renders as a separate Electron child window that's invisible to
+    # `screencapture -l <main_wid>`. Full-screen `screencapture -x` always
+    # includes overlaid windows.
+    screencap = tmpdir / "_question_ocr.png"
+    try:
+        subprocess.run(
+            ["screencapture", "-x", str(screencap)],
+            check=True, capture_output=True,
+        )
+    except subprocess.CalledProcessError as e:
+        if not quiet:
+            print(f"      [auq-debug] screencapture full-screen failed: {e}")
+        return None
+
+    try:
+        img = Image.open(screencap)
+        data = pytesseract.image_to_data(img, output_type=pytesseract.Output.DICT)
+    except Exception as e:
+        if not quiet:
+            print(f"      [auq-debug] OCR raised: {type(e).__name__}: {e}")
+        screencap.unlink(missing_ok=True)
+        return None
+    finally:
+        screencap.unlink(missing_ok=True)
+
+    # Reconstruct full text from OCR words for signature detection
+    text_all = " ".join((data["text"][i] or "") for i in range(len(data["text"]))).lower()
+    has_aq = "askuserquestion" in text_all
+    has_tb = "type below" in text_all
+    if not quiet and (has_aq or has_tb):
+        print(f"      [auq-debug] OCR found askuserquestion={has_aq} type_below={has_tb}")
+    if not has_aq:
+        return None
+    if not has_tb:
+        return None
+
+    # Find the popup's vertical bounds:
+    #   footer_top_y:    the top of "type below" footer hint  (anchor first)
+    #   header_bottom_y: the bottom of the popup's question text
+    # The first option lies between these.
+    #
+    # IMPORTANT: find footer FIRST, then find the popup question as the "?"
+    # word CLOSEST TO (just above) the footer. The chat thread can contain
+    # many "?" characters from previous popup history (each resolved
+    # AskUserQuestion remains as a chat record). Picking the FIRST "?" in
+    # OCR order could anchor on a chat-history "?" much higher up, leading
+    # the "topmost option" finder to pick up text from the question header
+    # row of the LIVE popup (we'd click on the question text instead of
+    # option 1, and the popup wouldn't dismiss).
+    img_h = img.height
+    img_w = img.width
+    n = len(data["text"])
+
+    footer_top_y = None
+    for i in range(n):
+        text = (data["text"][i] or "").strip().lower()
+        if text == "type" and i + 1 < n:
+            next_text = (data["text"][i + 1] or "").strip().lower()
+            if next_text == "below":
+                footer_top_y = data["top"][i]
+                break
+    if footer_top_y is None:
+        footer_top_y = int(img_h * 0.95)
+
+    # Now find the popup's question header: the "?" word with the HIGHEST
+    # y (closest to the bottom) that's still ABOVE the footer. That's the
+    # popup's own question — anything higher in the chat is history.
+    header_bottom_y = None
+    best_q_y = -1
+    for i in range(n):
+        text = (data["text"][i] or "").strip()
+        if "?" not in text or len(text) < 3:
+            continue
+        try:
+            if int(data["conf"][i]) < 50:
+                continue
+        except (ValueError, TypeError):
+            continue
+        q_top = data["top"][i]
+        q_bot = data["top"][i] + data["height"][i]
+        if q_bot >= footer_top_y - 5:
+            continue
+        if q_top > best_q_y:
+            best_q_y = q_top
+            header_bottom_y = q_bot
+    if header_bottom_y is None:
+        header_bottom_y = max(int(img_h * 0.4), footer_top_y - 900)
+
+    # ALSO restrict horizontally to the center 60% of the screen — Cowork's
+    # popup is always centered, while the sidebar (left chat history list)
+    # is in the left ~15% and the right Cowork-context panel is in the right
+    # ~15%. Restricting horizontally guarantees we never pick a sidebar word
+    # even if vertical bounds are off.
+    horiz_lo = int(img_w * 0.20)
+    horiz_hi = int(img_w * 0.80)
+
+    # Find the topmost text word strictly between header and footer, within
+    # the center horizontal band. Filter: confidence ≥ 50, length ≥ 3 (skip
+    # OCR garbage + option-number badges that OCR sometimes returns as
+    # single chars). That topmost qualifying word belongs to option 1.
+    best_i = -1
+    best_top = footer_top_y
+    for i in range(n):
+        text = (data["text"][i] or "").strip()
+        if len(text) < 3:
+            continue
+        try:
+            conf = int(data["conf"][i])
+        except (ValueError, TypeError):
+            continue
+        if conf < 50:
+            continue
+        top = data["top"][i]
+        left = data["left"][i]
+        if top <= header_bottom_y + 5 or top >= footer_top_y - 5:
+            continue
+        if left < horiz_lo or left > horiz_hi:
+            continue
+        if top < best_top:
+            best_top = top
+            best_i = i
+
+    if best_i < 0:
+        if not quiet:
+            print(f"      [auq-debug] signature detected but no option found "
+                  f"in range y=[{header_bottom_y}, {footer_top_y}], x=[{horiz_lo}, {horiz_hi}]")
+        return None
+
+    # Image coords are absolute physical screen pixels (full-screen capture).
+    # Divide by pixel_scale to get logical screen coords for cliclick — no
+    # window_bounds offset needed.
+    img_x = data["left"][best_i] + data["width"][best_i] // 2
+    img_y = data["top"][best_i] + data["height"][best_i] // 2
+    logical_x = int(img_x / scale)
+    logical_y = int(img_y / scale)
+    option_text = (data["text"][best_i] or "").strip()
+    return (logical_x, logical_y, option_text)
+
+
+def dismiss_question_popup_via_ocr(wid: int, window_bounds: dict, scale: float,
+                                     tmpdir: Path) -> str | None:
+    """Detect Cowork's AskUserQuestion popup; click option 1; VERIFY dismissal.
+
+    Mid-stream, Cowork sometimes invokes its AskUserQuestion tool to make the
+    user choose between options before continuing (e.g., "What format do you
+    want the document in? 1) Word, 2) PDF, 3) PowerPoint"). Without input,
+    streaming pauses indefinitely.
+
+    The popup is identifiable by two co-occurring OCR signals:
+        "AskUserQuestion" — Cowork's tool name (chat-message header "Using
+          AskUserQuestion..."). Extremely distinctive.
+        "type below"      — popup's footer hint ("or type below"). Confirms
+          the live popup is fully rendered.
+
+    Click → wait → re-scan loop verifies the popup actually dismissed (the
+    click landing on the wrong row was a real failure mode — see history).
+    Up to 3 click attempts. After each successful dismissal (re-scan returns
+    None OR option text changed = new popup), we return; the polling loop
+    will catch the next popup on its next iteration.
+
+    History (2026-06-09 → 2026-06-10): two stacked bugs surfaced via N7 frame
+    analysis. (1) `kp:return` failed because keyboard focus wasn't on the
+    popup — switched to direct mouse click on option 1's OCR'd text bbox.
+    (2) The "?" anchor picked the FIRST question mark in OCR order, which
+    might be a chat-history "?" from a previous resolved popup, placing
+    `header_bottom_y` too high. The "topmost option" finder then picked up
+    the live popup's question-text row instead of option 1's row — click
+    landed on the question text, popup didn't dismiss, log misleadingly
+    claimed success. Fixed by anchoring header to the "?" CLOSEST to (just
+    above) the "type below" footer, and by adding this verify-and-retry loop.
+
+    Returns a status string describing what happened, or None if no popup
+    was detected at the initial scan.
+    """
+    target = _find_option_1_coords(scale, tmpdir)
+    if target is None:
+        return None
+
+    last_text = None
+    for attempt in range(3):
+        logical_x, logical_y, option_text = target
+        try:
+            subprocess.run(["cliclick", f"c:{logical_x},{logical_y}"], check=True)
+        except subprocess.CalledProcessError:
+            return None
+        last_text = option_text
+
+        # Verify: give the popup ~1.5s to dismiss + the next popup (if any)
+        # to render, then re-scan. If signature gone → dismissed. If
+        # signature still present but option text differs → a new popup is
+        # up (treat as success and let outer loop handle the next one).
+        time.sleep(1.5)
+        verify = _find_option_1_coords(scale, tmpdir, quiet=True)
+        if verify is None:
+            return f"AskUserQuestion: clicked option 1 '{option_text}' @ ({logical_x},{logical_y}) — verified dismissed (attempt {attempt + 1})"
+        new_x, new_y, new_text = verify
+        if new_text.lower() != option_text.lower() or abs(new_y - logical_y) > 30:
+            return f"AskUserQuestion: clicked option 1 '{option_text}' @ ({logical_x},{logical_y}) — new popup detected (attempt {attempt + 1})"
+
+        # Same popup, same option row. Click missed — re-target with fresh
+        # OCR coords (in case popup shifted slightly) and retry.
+        print(f"      [auq-debug] click attempt {attempt + 1} did not dismiss "
+              f"popup; option '{option_text}' still topmost — retrying")
+        target = (new_x, new_y, new_text)
+
+    return f"AskUserQuestion: 3 click attempts failed to dismiss popup '{last_text}'"
+
+
 def find_screen_device() -> str:
     """Find the avfoundation device index for 'Capture screen 0'.
 
@@ -1486,7 +1877,8 @@ def _region_diff(center: dict, radius: int, ref_rel: str, tmpdir: Path) -> float
         sample.unlink(missing_ok=True)
 
 
-def sample_input_bar_scores(cfg: dict, tmpdir: Path) -> tuple[float, float]:
+def sample_input_bar_scores(cfg: dict, tmpdir: Path,
+                            coord_override: dict | None = None) -> tuple[float, float]:
     """Return (stop_score, mic_score) for the input-bar control.
 
     stop_score = diff of the stop-button region vs the streaming reference
@@ -1497,19 +1889,26 @@ def sample_input_bar_scores(cfg: dict, tmpdir: Path) -> tuple[float, float]:
     The states are mutually exclusive and live in DIFFERENT spots (the input
     bar re-lays-out between streaming and idle), so we sample both and let the
     caller decide by which is lower — a relative comparison, no absolute
-    threshold. The old single-region detector compared only the stop spot to
-    the streaming ref; when streaming ended that spot showed "Opus 4.7" text,
-    which differs from ■ by only ~9.5 — under the 12.0 cutoff — so it read
-    "still streaming" for ~130s. Comparing stop_score vs mic_score avoids that.
+    threshold.
+
+    `coord_override` (if provided) overrides the `center_logical` for stop +
+    mic with runtime-detected coords from the chat input box. radius_logical
+    + reference crops still come from cfg (they don't shift with layout).
+    Used to compensate for layout shifts (doc panel opening narrows the chat
+    panel, shifts the input box + buttons leftward).
 
     Raises subprocess.CalledProcessError / OSError on screencap failure.
     """
-    stop = cfg["stop_button"]
-    mic = cfg["mic_button"]
-    stop_score = _region_diff(stop["center_logical"], stop["radius_logical"],
-                              stop["streaming_crop"], tmpdir)
-    mic_score = _region_diff(mic["center_logical"], mic["radius_logical"],
-                             mic["idle_crop"], tmpdir)
+    if coord_override:
+        stop_center = coord_override["stop_button"]["center_logical"]
+        mic_center = coord_override["mic_button"]["center_logical"]
+    else:
+        stop_center = cfg["stop_button"]["center_logical"]
+        mic_center = cfg["mic_button"]["center_logical"]
+    stop_score = _region_diff(stop_center, cfg["stop_button"]["radius_logical"],
+                              cfg["stop_button"]["streaming_crop"], tmpdir)
+    mic_score = _region_diff(mic_center, cfg["mic_button"]["radius_logical"],
+                             cfg["mic_button"]["idle_crop"], tmpdir)
     return stop_score, mic_score
 
 
@@ -1681,18 +2080,80 @@ def main():
             # ---- Poll until done ----
             print(f"\n[5/6] Polling for streaming-end "
                   f"(stop-vs-mic relative match, debounce={DEBOUNCE_FRAMES} frames)...")
+            # Initial nudge: scroll chat to bottom RIGHT NOW so the first
+            # tool/permission output is already in frame when polling begins.
+            nudge_chat_to_bottom()
+            # Initial chat input box detection — scans at the calibrated
+            # button y to find the input box's horizontal extent. Then
+            # derives stop/mic button x via box.right - 30 and preserves
+            # the calibrated stop/mic x-offset (89 logical px). Falls back
+            # to calibrated cfg coords if detection fails.
+            cal_btn_y = cfg["mic_button"]["center_logical"]["y"]
+            input_box = find_chat_input_box(cfg["pixel_scale"], cal_btn_y)
+            button_override = derive_button_coords_from_input_box(input_box, cfg) if input_box else None
+            if input_box and button_override:
+                stop_xy = button_override["stop_button"]["center_logical"]
+                mic_xy = button_override["mic_button"]["center_logical"]
+                print(f"      [layout] chat input box at y={cal_btn_y}: "
+                      f"x=[{input_box['left']}, {input_box['right']}]; "
+                      f"stop=({stop_xy['x']}, {stop_xy['y']}) mic=({mic_xy['x']}, {mic_xy['y']})")
+            else:
+                print(f"      [layout] chat input box not detected at y={cal_btn_y}; "
+                      f"using calibrated button coords")
+            last_box_right = input_box["right"] if input_box else None
             non_match_streak = 0
             samples = 0
             samples_streaming = 0
             samples_idle = 0
             samples_failed = 0
             allow_clicks = 0
+            # Periodic chat-bottom nudges keep new content (especially
+            # permission-prompt buttons) in the visible frame so auto-click
+            # via AX/OCR can find them. Run every NUDGE_EVERY_N_SAMPLES.
+            NUDGE_EVERY_N_SAMPLES = 5  # ~1s at POLL_INTERVAL_S = 200ms
+            # Periodic chat input box re-detection catches mid-stream layout
+            # shifts (e.g., doc panel opens partway through streaming when
+            # Cowork starts writing the brief). Re-detect on wall-clock
+            # interval, NOT sample count — polling samples can take 1-2s
+            # each (nudge + auto-click probes + screencaps), so sample-count
+            # cadence drifts to tens of seconds and misses fast layout
+            # changes. Wall-clock keeps re-detection at ~5s regardless.
+            INPUT_BOX_REDETECT_INTERVAL_S = 5.0
+            last_input_box_check_at = time.time()
             poll_deadline = time.time() + MAX_RECORDING_S
             # Track consecutive screencap failures so we know when to refresh
             # the Claude window ID (it can go stale if Cowork desktop restarts
             # mid-run, e.g. to apply a pending update).
             consecutive_failures = 0
             while time.time() < poll_deadline:
+                # Keep the chat scrolled to the bottom so newly-rendered
+                # permission prompts stay in frame for auto-click + recording.
+                # Run every NUDGE_EVERY_N_SAMPLES (~1s). Cheap (~0.4s total of
+                # CGEvent posts) and idempotent — once at bottom, additional
+                # scroll-down events are no-ops.
+                if samples > 0 and samples % NUDGE_EVERY_N_SAMPLES == 0:
+                    nudge_chat_to_bottom()
+
+                # Periodic chat input box re-detection. If the layout shifted
+                # (doc panel opened/closed, panel resized), re-derive button
+                # coords. Wall-clock cadence (~5s) so we catch fast layout
+                # changes even when sample polling is slow. Only update if
+                # right edge moved by >10 logical px (avoid jitter from noise).
+                if time.time() - last_input_box_check_at >= INPUT_BOX_REDETECT_INTERVAL_S:
+                    last_input_box_check_at = time.time()
+                    new_box = find_chat_input_box(cfg["pixel_scale"], cal_btn_y)
+                    if new_box and (last_box_right is None
+                                    or abs(new_box["right"] - last_box_right) > 10):
+                        button_override = derive_button_coords_from_input_box(new_box, cfg)
+                        if button_override:
+                            stop_xy = button_override["stop_button"]["center_logical"]
+                            mic_xy = button_override["mic_button"]["center_logical"]
+                            elapsed = time.time() - started_at
+                            print(f"      [t={elapsed:5.1f}s]  [layout] input box shifted "
+                                  f"right {last_box_right} → {new_box['right']}; "
+                                  f"stop=({stop_xy['x']}, {stop_xy['y']}) mic=({mic_xy['x']}, {mic_xy['y']})")
+                            last_box_right = new_box["right"]
+
                 # Auto-dismiss MCP permission dialogs.
                 # Two paths: cheap AppleScript (native dialogs) every poll, OCR
                 # (HTML/Electron dialogs) every 5th poll = ~1s. OCR is the path
@@ -1708,6 +2169,17 @@ def main():
                         )
                     except Exception:
                         clicked = None
+                # Also check for AskUserQuestion popup (a different mid-stream
+                # blocker — Cowork's option-picker that waits for the user
+                # to pick between numbered choices). Same cadence as OCR
+                # allow-button check.
+                if not clicked and samples % 5 == 0:
+                    try:
+                        clicked = dismiss_question_popup_via_ocr(
+                            win["id"], cfg["claude_window_bounds"], cfg["pixel_scale"], tmpdir,
+                        )
+                    except Exception:
+                        clicked = None
                 if clicked:
                     allow_clicks += 1
                     elapsed = time.time() - started_at
@@ -1718,7 +2190,9 @@ def main():
                 # failures (modal dialogs in flight, window-list churn, etc.) —
                 # treat as ambiguous, don't crash.
                 try:
-                    stop_score, mic_score = sample_input_bar_scores(cfg, tmpdir)
+                    stop_score, mic_score = sample_input_bar_scores(
+                        cfg, tmpdir, coord_override=button_override,
+                    )
                     consecutive_failures = 0  # success — reset the counter
                 except (subprocess.CalledProcessError, OSError):
                     samples += 1
