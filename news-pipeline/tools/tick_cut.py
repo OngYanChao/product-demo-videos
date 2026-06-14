@@ -48,19 +48,26 @@ MAIN_TOOLS = PROJECT_ROOT / "tools"
 # Cowork Progress-sidebar region — V1's canonical value from 1vid_zooms.json.
 # Format: "x_pct,y_pct,w_pct,h_pct".
 DEFAULT_REGION_PCT = "80,0,20,30"
-# How many phase transitions to look for. Cowork news tasks typically have
-# 2–6 phases; over-specifying is fine — detect_ticks applies non-max suppression
-# so adjacent peaks don't double-count.
-DEFAULT_EXPECTED_TICKS = 8
+# How many peaks to surface from detect_ticks. Cowork news tasks typically
+# have 2–6 real phase ticks, but the scrubbed file also contains the brief-
+# landed snap (mag 100+), outro animation, and scroll-start peaks that have
+# higher magnitudes than the actual checklist ticks (mag ~10-15). If we cap
+# detection too low (e.g., 8), the real first tick — which is the lowest-t
+# real-checklist peak — gets edged out by these higher-mag post-streaming
+# events, and tick_cut anchors z0b around the wrong content. Setting to 20
+# safely surfaces all real ticks + the higher-mag post events; the lowest-t
+# qualifying peak is then the real first tick. NMS still prevents adjacent
+# peaks from double-counting.
+DEFAULT_EXPECTED_TICKS = 100  # bumped from 20 → 100 (2026-06-08) so low-mag real ticks (mag 5-15 in tool-heavy queries) aren't edged out of the top-N by higher-mag post-brief scroll events
 # Window kept around each tick: tail_seconds before + tail_seconds after.
 # Newsletter/email embed default — ticks fire every 1s (tail=0.5 each side).
-DEFAULT_TAIL_SECONDS = 0.5
+DEFAULT_TAIL_SECONDS = 1.0  # V1 pattern: ±1s around each tick (was 0.5; bumped 2026-06-05 so each tick has 1s of pre-tick anticipation + 1s of post-tick settling)
 # Pre-segment: by default keep the FULL pre. The pre contains the prompt
 # being typed in — that's the news question / topic the viewer needs as
 # context for the analysis, not noise. Caller can pass a numeric value to
 # compress further if a specific recording's pre is unusually long, but the
 # default never silently cuts user-visible content.
-DEFAULT_PRE_SECONDS: float | None = None
+DEFAULT_PRE_SECONDS: float | None = None  # None = keep entire pre-tick (process.py handles buffer-1 compression separately)
 # Post-segment: by default keep ALL the post-tick segment — that's the
 # response writing + scroll-down, the part the viewer is watching for.
 DEFAULT_POST_SECONDS: float | None = None
@@ -86,6 +93,10 @@ AUTO_ZOOM_PROGRESS_REGION_PCT = [80, 0, 20, 30]  # V1 z0b.region_pct
 AUTO_ZOOM_INPUT_FACTOR = 1.5             # V1 z0.zoom (NOT 2.5 — that's z0b's value)
 AUTO_ZOOM_PROGRESS_FACTOR = 2.5          # V1 z0b.zoom
 AUTO_ZOOM_EASE_S = 1.5                   # V1 ease for both z0 + z0b
+# Gap (in OUTPUT time) between z0 ease-out and z0b ease-in. Set to 0 so the
+# camera transitions continuously from chat-input zoom into Progress-sidebar
+# zoom — sidebar IS the loading visual; full-frame gap defeats that focus.
+AUTO_ZOOM_Z0_Z0B_GAP_S = 0.0
 
 # News-pipeline hard rule (decisions/2026-05-28-news-1s-dead-time-cap.md):
 # any dead-time interval >1s in the POST-tick portion of the output is capped
@@ -155,8 +166,21 @@ def tick_cut(input_mp4: Path, output_mp4: Path,
              expected_ticks: int = DEFAULT_EXPECTED_TICKS,
              tail_seconds: float = DEFAULT_TAIL_SECONDS,
              pre_seconds: float | None = DEFAULT_PRE_SECONDS,
-             post_seconds: float | None = DEFAULT_POST_SECONDS) -> bool:
-    """Run detect_ticks + trim+concat. Returns True on success."""
+             post_seconds: float | None = DEFAULT_POST_SECONDS,
+             scan_start_s: float = 0.0,
+             scan_end_s: float | None = None) -> bool:
+    """Run detect_ticks + trim+concat + emit z0/z0b zooms. Returns True on success.
+
+    `scan_start_s`: limit detect_ticks's time range to [scan_start_s, scan_end_s].
+    Caller passes typing_end_scrubbed (+ small buffer) so detect_ticks doesn't
+    pick up typing-zone false positives.
+
+    `scan_end_s`: upper bound for detection scan. Caller passes
+    preserve_end_scrubbed (= the boundary between the at-1× preserved tick
+    montage and the scrub-compressed post region) so post-brief scroll
+    content peaks (mag 20-40) don't dominate the top-N and squeeze out
+    low-mag real ticks. Defaults to in_duration if None.
+    """
     input_mp4 = input_mp4.resolve()
     output_mp4 = output_mp4.resolve()
     if not input_mp4.exists():
@@ -167,11 +191,11 @@ def tick_cut(input_mp4: Path, output_mp4: Path,
     ticks_json = output_mp4.with_suffix(".ticks.json")
 
     # ── 1. detect ticks via the main pipeline's tool ─────────────────────
-    # Scan the full input. The scroll-up segment is already trimmed out by
-    # capture.py and the read-through doesn't tick (Progress panel is static
-    # during scroll-down), so false positives from outside the streaming
-    # portion are rare. NMS in detect_ticks handles modest noise.
-    time_range = f"0:{in_duration:.2f}"
+    # Scan [scan_start_s, scan_end_s]. Caller bounds the range to the
+    # at-1×-preserved tick montage region (skipping typing-zone false
+    # positives at the front and post-brief scroll noise at the back).
+    scan_end_effective = scan_end_s if scan_end_s is not None else in_duration
+    time_range = f"{scan_start_s:.2f}:{scan_end_effective:.2f}"
     print(f"[tick-cut] detect_ticks range={time_range} region={region_pct} "
           f"expected={expected_ticks} tail={tail_seconds}s")
     try:
@@ -201,10 +225,25 @@ def tick_cut(input_mp4: Path, output_mp4: Path,
 
     # ── 2. parse keep ranges + wrap with pre/post ────────────────────────
     ticks_data = json.loads(ticks_json.read_text())
-    tick_windows: list[tuple[float, float]] = []
-    for r in ticks_data.get("ffmpeg_keep_ranges", []):
-        s, e = r.split(":")
-        tick_windows.append((float(s), float(e)))
+    all_peaks = ticks_data.get("ticks", [])
+    # Filter detected peaks to REAL checkmark ticks by magnitude:
+    #   - mag ≥ 3.0: excludes sub-tick noise (cursor blinks at 0.4-0.8)
+    #   - mag < 100.0: excludes the brief-landed snap itself (mag 100-150)
+    #     AND any other high-mag UI-collapse events. We exclude these because
+    #     they're qualitatively different from checkmark ticks — they'd skew
+    #     z0b sizing if treated as ticks.
+    # Position filtering is handled at the scan layer: scan_end_s = preserve_
+    # end_scrubbed bounds the range to the at-1× preserved tick montage, so
+    # post-brief scroll content peaks don't reach this filter at all.
+    real_ticks = [t for t in all_peaks
+                  if 3.0 <= t.get("magnitude", 0) < 100.0]
+    real_ticks.sort(key=lambda t: t["t_tick"])
+    # Build per-tick windows: ±tail_seconds around each tick_t.
+    tick_windows: list[tuple[float, float]] = [
+        (max(0.0, t["t_tick"] - tail_seconds),
+         min(in_duration, t["t_tick"] + tail_seconds))
+        for t in real_ticks
+    ]
 
     if not tick_windows:
         print(f"[tick-cut] no ticks detected; copying input unchanged")
@@ -226,6 +265,9 @@ def tick_cut(input_mp4: Path, output_mp4: Path,
         "-filter_complex", filter_graph,
         "-map", "[out]",
         "-c:v", "libx264", "-preset", "fast", "-crf", "20",
+        # Hard Rule #15: 60fps + 1s keyframes end-to-end on every pipeline
+        # intermediate, not just the final deliverable.
+        "-g", "60", "-keyint_min", "60",
         "-pix_fmt", "yuv420p",
         str(output_mp4),
     ]
@@ -271,9 +313,9 @@ def tick_cut(input_mp4: Path, output_mp4: Path,
             "mode": "follow",
             "pause_after": 0,
         })
-        z0b_source_t = z0_duration
+        z0b_source_t = z0_duration + AUTO_ZOOM_Z0_Z0B_GAP_S
     else:
-        z0b_source_t = pre_output_dur
+        z0b_source_t = pre_output_dur + AUTO_ZOOM_Z0_Z0B_GAP_S
 
     # z0b: Progress-sidebar follow during the tick montage. Starts where z0
     # ends (or at the tick-montage start if z0 was skipped) and runs to the
@@ -376,6 +418,12 @@ def cap_dead_times(video_path: Path,
         "-filter_complex", filter_graph,
         "-map", "[out]",
         "-c:v", "libx264", "-preset", "fast", "-crf", "20",
+        # Hard Rule #15: 60fps + 1s keyframes end-to-end. Without these
+        # explicit flags ffmpeg uses its default 250-frame GOP (~4.17s gap
+        # at 60fps), and since cap_dead_times is the LAST writer to
+        # zoom.mp4 in the news pipeline it overrides zoom.py's correctly-
+        # keyed segments. Caught by lint_news.py L03 (decisions/2026-06-14).
+        "-g", "60", "-keyint_min", "60",
         "-pix_fmt", "yuv420p",
         str(tmp),
     ]

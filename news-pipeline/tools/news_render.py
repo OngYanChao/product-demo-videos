@@ -25,6 +25,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 NEWS_PIPELINE_ROOT = Path(__file__).resolve().parents[1]
@@ -242,30 +243,44 @@ def render(slot_dir: Path, title_override: str | None = None,
     output_path = slot_dir / "final.mp4"
 
     if dry_run:
-        print(f"\n[dry-run] would stage {recording.name} → {TEMPLATE_RECORDING_SLOT.name}")
+        print(f"\n[dry-run] would stage {recording.name} → assets/screen-recording.mp4")
         print(f"[dry-run] would substitute title + comp duration {duration + 12:.2f}s")
         print(f"[dry-run] would render → {output_path.relative_to(PROJECT_ROOT)}")
         return None
 
-    # Backup the template so substitutions don't pollute it between renders.
-    backup_path = TEMPLATE_INDEX.with_suffix(".html.bak")
-    shutil.copy(TEMPLATE_INDEX, backup_path)
+    # Copy the canonical template into a per-run temp dir. All substitutions
+    # + asset staging happen against this copy. The canonical template is
+    # never mutated, so:
+    #   - concurrent renders of different slots don't race on shared state
+    #   - the canonical placeholders ("78"/"90"/"83") are always present at
+    #     substitution time, so the regex always matches
+    #   - if rendering is interrupted (KeyboardInterrupt, OOM, crash), there
+    #     is no .bak to restore — the canonical template is already pristine
+    #   - no need to git-checkout to recover from corrupted template state
+    # Cost: ~50ms per render to copy ~200KB of HTML + ~80MB recording slot,
+    # negligible vs the ~2min Hyperframes render itself.
+    tmpdir = Path(tempfile.mkdtemp(prefix=f"news-render-{slot_dir.name}-"))
     try:
-        # 1. Stage the recording into the template's assets slot.
-        shutil.copy(recording, TEMPLATE_RECORDING_SLOT)
+        work_template = tmpdir / "news"
+        shutil.copytree(TEMPLATE_DIR, work_template)
+        work_index = work_template / "index.html"
+        work_recording_slot = work_template / "assets" / "screen-recording.mp4"
 
-        # 2. Substitute title + durations.
-        html_src = TEMPLATE_INDEX.read_text()
+        # 1. Stage the recording into the temp template's assets slot.
+        shutil.copy(recording, work_recording_slot)
+
+        # 2. Substitute title + durations on the temp copy.
+        html_src = work_index.read_text()
         html_src = _substitute_title(html_src, title)
         html_src = _substitute_durations(html_src, duration)
-        TEMPLATE_INDEX.write_text(html_src)
+        work_index.write_text(html_src)
 
-        # 3. Run Hyperframes. --fps 60 + --quality high mirror the main
-        # pipeline's settings per the 60fps Hard Rule.
+        # 3. Run Hyperframes against the temp template. --fps 60 + --quality
+        # high mirror the main pipeline's settings per Hard Rule #15.
         print(f"\n[render] hyperframes render → {output_path.relative_to(PROJECT_ROOT)} "
               f"(fps={fps}, quality={quality})")
         cmd = [
-            "npx", "hyperframes", "render", str(TEMPLATE_DIR),
+            "npx", "hyperframes", "render", str(work_template),
             "-o", str(output_path),
             "--fps", str(fps),
             "--quality", quality,
@@ -280,12 +295,13 @@ def render(slot_dir: Path, title_override: str | None = None,
         print(f"\n[render] ✓ final: {output_path.relative_to(PROJECT_ROOT)}")
         return output_path
     finally:
-        # Always restore the template so the working copy stays clean and the
-        # next run substitutes from the same baseline.
-        shutil.move(backup_path, TEMPLATE_INDEX)
+        # Always clean up the temp tree. ignore_errors so a stuck file handle
+        # on Windows or a lingering hyperframes subprocess doesn't mask the
+        # actual render result.
+        shutil.rmtree(tmpdir, ignore_errors=True)
 
 
-def main():
+def main() -> int:
     ap = argparse.ArgumentParser(description="Compose a final news video from a slot.")
     ap.add_argument("slot", help="Slot id (e.g., 'N7') or path to slot directory")
     ap.add_argument("--title", default=None,
@@ -299,9 +315,15 @@ def main():
     ap.add_argument("--dry-run", action="store_true",
                     help="Print what would happen; don't render.")
     args = ap.parse_args()
-    render(resolve_slot(args.slot), title_override=args.title,
-           fps=args.fps, quality=args.quality, dry_run=args.dry_run)
+    result = render(resolve_slot(args.slot), title_override=args.title,
+                    fps=args.fps, quality=args.quality, dry_run=args.dry_run)
+    # dry-run returns None deliberately → exit 0. A real run that returned
+    # None means render() hit a failure path (subprocess exit ≠ 0, missing
+    # output, etc.) → exit 1 so the orchestrator (process.py) sees it.
+    if args.dry_run:
+        return 0
+    return 0 if result is not None else 1
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
