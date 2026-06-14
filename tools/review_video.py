@@ -748,10 +748,15 @@ def check_R03_rotation(client, model, ctx, cost) -> list[CheckFinding]:
     )
 
     shape_lines = [f"- **{s.panel_id}**: *{s.shape}* — {s.rationale}" for s in verdict.shapes]
-    if verdict.result == "pass":
+    # Compute severity from actual evidence rather than the LLM's `result`
+    # field. Observed on V1: LLM returned result="fail" + zero consecutive
+    # violations + all panels cleanly classified — internally inconsistent.
+    # Source-of-truth is consecutive_violations: empty list ↔ no rotation
+    # rule violation ↔ pass.
+    if len(verdict.consecutive_violations) == 0:
         return [CheckFinding(
             rule="R03", subject="all_panels", severity="pass",
-            summary=f"all panels classified, no consecutive same-shape",
+            summary="all panels classified, no consecutive same-shape",
             detail="\n".join(shape_lines),
         )]
     else:
@@ -1043,7 +1048,10 @@ def render_report(video_id: str, model: str, findings: list[CheckFinding],
             lines.append("")
             lines.append(finding.detail)
             if finding.evidence_frame and finding.evidence_frame.exists():
-                rel = finding.evidence_frame.relative_to(out_dir)
+                # os.path.relpath handles upward traversal (../frames/…) which
+                # Path.relative_to cannot — frames live at frames/V<N>/, a
+                # sibling of outputs/V<N>/, not a subdir.
+                rel = os.path.relpath(finding.evidence_frame, out_dir)
                 lines.append("")
                 lines.append(f"![{finding.subject}]({rel})")
             lines.append("")

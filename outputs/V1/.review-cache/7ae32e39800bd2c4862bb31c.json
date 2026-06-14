@@ -1,0 +1,21 @@
+{
+  "result": "fail",
+  "shapes": [
+    {
+      "panel_id": "ap1",
+      "shape": "capability",
+      "rationale": "Eyebrow explicitly says 'WHAT IT GIVES YOU' and body pitches what Parallax surfaces on every brief \u2014 a peer-adjusted answer the buyer gets."
+    },
+    {
+      "panel_id": "ap2",
+      "shape": "stakes",
+      "rationale": "Body frames what's on the line: distinguishing a valuation reset from an actual quality problem before talking to the client. The consequence of getting the diagnosis right is the angle."
+    },
+    {
+      "panel_id": "ap3",
+      "shape": "capability",
+      "rationale": "Eyebrow says 'WHAT IT GIVES YOU'; body pitches what the Bottom Line gives \u2014 a quotable, citation-ready verdict with reasoning compressed underneath."
+    }
+  ],
+  "consecutive_violations": []
+}

@@ -1,0 +1,6 @@
+{
+  "result": "pass",
+  "reasoning": "The bright/spotlit area is centered on the Total row's trajectory cell showing '8.5 \u2192 5.0 \u2014 material derating in the composite even as the underlying business stayed top-tier.' The panel pitches the 52-week trajectory and the question of whether market or business drove the score change. The sub-annotate beat note explicitly calls for focus on the Total row's 52-wk trend cell (8.5 \u2192 5.0), which is exactly what is illuminated. The spotlight sits in the vertical safe zone and tightly bounds the specific cell the VO names.",
+  "spotlit_content_description": "The Total row's trajectory/52-week cell showing '8.5 \u2192 5.0 \u2014 material derating in the composite even as the underlying business stayed top-tier.' Surrounding rows and body text are dimmed.",
+  "panel_pitch_description": "The panel frames the 52-week trajectory as the diagnostic for whether a score drop reflects a market reset (Value compression with Quality persistence) or an actual business problem (Quality fading) \u2014 pointing the viewer to the Total trajectory cell to see which pattern this name fits."
+}

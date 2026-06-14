@@ -1,0 +1,6 @@
+{
+  "result": "fail",
+  "reasoning": "The cited content describes the initial brief delivery with header 'NVDA \u2014 Stock Brief', price/cap/PE line, factor table (Quality 10, Value 3, etc.), and a 5-of-5 progress sidebar. The frame instead shows the later 'Bottom Line' and 'Analyst View' / 'Recent News' sections of the brief. There is no visible header line, no price/Mkt Cap/PE line, no factor table, and no 5-of-5 progress checklist visible. The Progress sidebar shows only 'See task progress for longer tasks' \u2014 not the 5-step checklist.",
+  "cite_text": "brief delivered \u2014 'Used Parallax integration, used 13 tools, used a skill' + 'NVDA \u2014 Stock Brief (NVIDIA Corp, NVDA.O)' + 'Price $225.32 \u00b7 Mkt Cap $5.46T \u00b7 P/E 45.7 \u00b7 Today \u22124.4%' + Progress sidebar 5-of-5 complete + factor table (Quality 10, Value 3, Momentum 7, Defensive 8, Tactical 10)",
+  "frame_visible_content": "Lower portion of the NVDA brief showing peer comparison text (AMD/MU/AVGO returns), 'Recent News' section (Q4 FY2026 $68.1B, Q1 China exclusion, Vera Rubin platform), 'Analyst View' (9 Strong Buy, 2 Hold, 1 Sell, target $265, mean $268), and 'Bottom Line' paragraph. Progress sidebar shows 'See task progress for longer tasks.' Context panel shows Parallax connector and stock skill. No header, no price line, no factor table visible in this frame."
+}

@@ -1,0 +1,6 @@
+{
+  "result": "fail",
+  "reasoning": "The cite claims the user prompt reads 'Stock brief on NVDA. Client query, need a defensible read on the position.' but the actual visible prompt in the frame is 'I keep hearing about NVIDIA, can you give me a quick rundown on whether it's actually worth the hype right now?' This is a complete mismatch of the prompt text. The Working state, skill running indicators (Get stock outlook x3), and Progress sidebar are present, but the core cited prompt text is wrong.",
+  "cite_text": "user prompt visible 'Stock brief on NVDA. Client query, need a defensible read on the position.' + Working state + Running skill / Loading tools indicators + Progress sidebar appearing",
+  "frame_visible_content": "Cowork interface with task 'NVIDIA stock hype evaluation'. User prompt: 'I keep hearing about NVIDIA, can you give me a quick rundown on whether it's actually worth the hype right now?' Working indicator visible with three 'Get stock outlook' skill calls. Progress sidebar on right with two checkmarks and one pending. Context panel shows Parallax connector and stock skill."
+}

@@ -1,0 +1,9 @@
+{
+  "result": "fail",
+  "violations": [
+    {
+      "quoted_line": "You type the question in plain English, and Parallax pulls every input \u2014 scores, peers, macro, news, methodology \u2014 through the same factor framework. Thirteen years live, out-of-sample.",
+      "problem": "'Thirteen years live, out-of-sample' is recited as standalone credibility prose about the framework itself, not anchored to a specific output element the viewer is looking at. It's a scale/track-record claim floating in the methodology description."
+    }
+  ]
+}

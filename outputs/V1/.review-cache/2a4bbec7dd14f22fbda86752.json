@@ -1,0 +1,6 @@
+{
+  "result": "fail",
+  "reasoning": "The cite claims the quick-prompts are 'Deep dive analysis / Build scored portfolio / Analyze investor profile', but the frame actually shows 'Research and compare ETFs / Build scored portfolio / Research stock brief'. Two of the three prompt labels are wrong.",
+  "cite_text": "empty Cowork chrome with 'Let's knock something off your list' greeting + brand quick-prompts (Deep dive analysis / Build scored portfolio / Analyze investor profile)",
+  "frame_visible_content": "Cowork app with greeting 'Let's knock something off your list', input box 'How can I help you today?', Work in a project / Opus 4.7 selectors, and three quick-prompts under 'Get to work with Parallax': Research and compare ETFs, Build scored portfolio, Research stock brief."
+}

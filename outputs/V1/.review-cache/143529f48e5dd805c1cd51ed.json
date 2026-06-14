@@ -1,0 +1,6 @@
+{
+  "result": "pass",
+  "reasoning": "The bright/in-focus area covers the Bottom Line header and the opening lines of its paragraph ('NVDA scores top-decile on Quality and Tactical with a 21% consensus upside, lowest peer volatility...'), which directly matches the panel's pitch about the Bottom Line giving a conclusion-first verdict (Hold/Trim/Add) with compressed reasoning. The Analyst View section above and the disclaimer/used-a-tool section below are visibly dimmer. The spotlight sits in the vertical mid-band as required.",
+  "spotlit_content_description": "The 'Bottom Line' header and the first several lines of its paragraph, naming NVDA as top-decile Quality/Tactical with 21% consensus upside and lowest peer volatility \u2014 the conclusion-first verdict text.",
+  "panel_pitch_description": "Panel #3 pitches the Bottom Line as a conclusion-first, quotable verdict (Hold/Trim/Add) with compressed reasoning beneath \u2014 citation-ready, no scrolling needed."
+}

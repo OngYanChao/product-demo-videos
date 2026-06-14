@@ -1,0 +1,6 @@
+{
+  "result": "pass",
+  "reasoning": "The frame shows a dimmed overlay across most of the score table, with the Value row (Value, 3, 'Expensive vs peers/fundamentals (P/E 45.7, but well below AVGO 80, AMD 140, ARM 246)', '2 \u2192 3 \u2014 slight cheapening, still bottom quartile') appearing as the brightest/most legible row. The paired panel pitches the Value Factor and the peer-adjusted answer to 'isn't NVDA expensive?' \u2014 explicitly highlighting peer comparison (AVGO/AMD/ARM P/E context). The spotlit Value row contains exactly that peer-comparison content, satisfying the panel's pitch. Spotlight center sits roughly in the middle vertical band of the composition, within the safe zone.",
+  "spotlit_content_description": "The Value row of the Scores table: 'Value | 3 | Expensive vs peers/fundamentals (P/E 45.7, but well below AVGO 80, AMD 140, ARM 246) | 2 \u2192 3 \u2014 slight cheapening, still bottom quartile.'",
+  "panel_pitch_description": "Value Factor panel arguing Parallax surfaces a peer-adjusted answer to the 'NVDA is expensive' objection \u2014 expensive in absolute terms but cheap vs AI-semi peers, with peer comparison on every brief."
+}
