@@ -1,19 +1,24 @@
 # product-demo-videos
 
-Video production pipelines for **Chicago Global / Parallax** — two automated workflows that turn live Cowork product demos into branded, ship-ready videos.
+Video production pipelines for **Chicago Global / Parallax** that turn live Cowork product demos into branded, ship-ready videos.
 
-This repo holds the orchestration, tools, templates, and per-video assets. Two pipelines coexist under one roof: a **product-demo pipeline** for the planned 20-video V-series content library, and a **news-pipeline** for autonomous Cowork-driven event briefs. They share the underlying capture + scrub + zoom + render layer but diverge on what comes between.
+This repo holds two distinct pipelines under one roof:
+
+1. **A manual / human-in-the-loop pipeline** — for the flagship 20-video V-series content library. Every video is hand-authored: locked beat sheet, written voiceover script, hand-designed zoom moves, HeyGen-rendered avatar, multi-tier review. Human gates at each phase.
+2. **A fully automated pipeline** — for autonomous news-driven Cowork briefs. One command from prompt to final mp4: capture → process → render → lint. No script writing, no avatar, no editorial layer, no human in the loop.
+
+They share the underlying capture + scrub + zoom + render layer but diverge sharply on what comes between.
 
 ---
 
 ## What's in here
 
-| Pipeline | Status | Output style |
-|---|---|---|
-| **Product-demo** (V-series, I-series) | Phase 7 production active; V1–V3 in canary | Scripted product demo with HeyGen avatar, lower-thirds, annotate panels, vault-stat callouts. Per-video script + zoom design + LLM review chain. |
-| **News-pipeline** (N-series) | End-to-end automated | Title card → autonomous Cowork run → Polaris outro. No script, no avatar, no lower-thirds. One command from prompt to final video. |
+| Pipeline | Style | Status | Output |
+|---|---|---|---|
+| **Product-demo** (V-series, I-series) | **Manual / human-in-the-loop** — 11 phases per video, multiple human gates, billable final render | Phase 7 production active; V1–V3 in canary | Scripted product demo with HeyGen avatar, lower-thirds, annotate panels, vault-stat callouts |
+| **News-pipeline** (N-series) | **Fully automated** — one command per slot, zero human decisions in the loop | End-to-end working | Title card → autonomous Cowork run → Polaris outro |
 
-The product-demo pipeline is more involved — every video has its own script, its own zoom design, its own beat sheet locked against the master 20-video plan, and ships only after a billable HeyGen avatar render. The news-pipeline is the simpler/cheaper analogue: drive Cowork with a prompt, capture the screen, run a deterministic post-processing chain, get a final mp4 — no script-writing or avatar billing in the loop.
+**Why the split.** The product-demo pipeline is intentionally manual because each V-series video is a marketing artifact — every beat is editorially designed against a 20-video master plan, every claim cites a frame, every panel speaks from the buyer's chair, every zoom is sized by the beat sheet. Automation would lose the editorial control that makes the V-series ship-worthy. The news-pipeline is intentionally automated because the deliverable is "watch Cowork solve this prompt with a branded wrapper" — there's no editorial layer to author, so removing the human from the loop is purely upside (faster iteration, $0/run, batchable).
 
 ---
 
