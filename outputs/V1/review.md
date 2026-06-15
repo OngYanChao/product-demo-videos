@@ -118,15 +118,15 @@ no beat-sheet table found for V1
 
 ### ✗ `frame_0026.jpg` — frame file missing: frame_0026.jpg
 
-/Users/ongyanchao/Desktop/Chicago Global/cowork plugin videos/frames/V1/frame_0026.jpg not on disk; re-run extract_frames.py
+/Users/ongyanchao/Desktop/Chicago Global/product-demo-videos/frames/V1/frame_0026.jpg not on disk; re-run extract_frames.py
 
 ### ✗ `frame_0027.jpg` — frame file missing: frame_0027.jpg
 
-/Users/ongyanchao/Desktop/Chicago Global/cowork plugin videos/frames/V1/frame_0027.jpg not on disk; re-run extract_frames.py
+/Users/ongyanchao/Desktop/Chicago Global/product-demo-videos/frames/V1/frame_0027.jpg not on disk; re-run extract_frames.py
 
 ### ✗ `frame_0030.jpg` — frame file missing: frame_0030.jpg
 
-/Users/ongyanchao/Desktop/Chicago Global/cowork plugin videos/frames/V1/frame_0030.jpg not on disk; re-run extract_frames.py
+/Users/ongyanchao/Desktop/Chicago Global/product-demo-videos/frames/V1/frame_0030.jpg not on disk; re-run extract_frames.py
 
 ### ✓ `frame_0015.jpg` — pass — The frame shows multiple sub-processes in the chat: 'List macro countries' (Result), 'Macro analyst' (Request), 'Explain
 

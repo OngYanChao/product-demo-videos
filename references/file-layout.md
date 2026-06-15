@@ -3,7 +3,7 @@
 Full annotated tree of the Parallax video production repo. Relocated from CLAUDE.md 2026-05-22 — kept out of always-loaded context to keep CLAUDE.md compact. Refresh when top-level dirs change.
 
 ```
-cowork plugin videos/
+product-demo-videos/
 ├── CLAUDE.md                              ← project handoff context
 ├── .env                                   ← HEYGEN_API_KEY + HEYGEN_AVATAR_ID + HEYGEN_VOICE_ID (gitignored)
 ├── .env.example                           ← template for env vars
