@@ -1,40 +1,50 @@
 # news-pipeline
 
-**Status:** experimental — Phase 1 (foundation/calibration) complete.
+**Status:** end-to-end automated. One command per slot produces `final.mp4` + a structured lint report.
 
-A *separate* workflow from the main product-demo pipeline. The idea: news event → LLM drafts a Parallax prompt → Claude desktop is driven via keystroke automation → output is captured → pipeline scrubs loading dead-time and renders a short demo video reacting to the news.
+A *separate* workflow from the product-demo pipeline. The idea: news event → LLM drafts a Parallax prompt (or you write one) → Claude desktop is driven via keystroke automation → output is captured → pipeline scrubs loading dead-time → renders a short demo video reacting to the news → lints the result.
 
-This directory holds **news-specific** policy + content. It consumes two shared layers from the project root: `tools/` (scrub.py, zoom.py, detect_ticks.py, etc.) and `automation/` (capture.py, calibrate.py + calibration data — the Claude-desktop driver). Both shared layers are invoked as **subprocesses or direct CLI calls** — no Python-level imports across folder boundaries. If the news experiment doesn't pan out, `rm -rf news-pipeline/` still leaves both shared layers + the main product-demo pipeline untouched.
+This directory holds **news-specific** policy + content. It consumes two shared layers from the project root: `tools/` (scrub.py, zoom.py, detect_ticks.py, static_gateway.py) and `automation/` (capture.py, calibrate.py + calibration data — the Claude-desktop driver). Both shared layers are invoked as **subprocesses or direct CLI calls** — no Python-level imports across folder boundaries. If the news experiment doesn't pan out, `rm -rf news-pipeline/` still leaves both shared layers + the product-demo pipeline untouched.
 
 ## Architecture (current)
 
 ```
-1. (optional) tools/draft_prompt.py    → LLM drafts a Parallax prompt (TBD)
-2. automation/capture.py               → drive Claude desktop, record screen,
+1. automation/capture.py               → drive Claude desktop, record screen,
                                          detect end-of-streaming via the
-                                         stop/mic dual-region match, scroll
-                                         chat to top, smooth scroll-down
-                                         read-through, then auto-trim the
-                                         scroll-up segment
+                                         stop/mic dual-region match, auto-dismiss
+                                         any AskUserQuestion popups (OCR-based,
+                                         verify-and-retry), scroll chat to top,
+                                         smooth scroll-down read-through, then
+                                         auto-trim the scroll-up segment
                                          → recordings/N<N>/raw.mp4
                                          → recordings/N<N>/trimmed.mp4
                                          → recordings/N<N>/manifest.json
-3. tools/process.py                    → news's pipeline orchestrator. Invoked
-                                         after capture.py by the news skill
-                                         (was auto-chained inside capture.py
-                                         pre-2026-05-29; capture.py is now
-                                         workflow-agnostic). Scrubs trimmed.mp4
-                                         + (if zooms.json present) applies
-                                         zooms via the project root's
-                                         tools/scrub.py + tools/zoom.py.
-                                         → recordings/N<N>/zoom.mp4
-                                         Standalone-callable for re-runs
-                                         without re-recording (edit zooms.json
-                                         and re-invoke process.py)
-4. tools/news_render.py                → compose final news video (Hyperframes;
-                                         title + recording + Polaris outro)
-                                         → recordings/N<N>/final.mp4
+
+2. news-pipeline/tools/process.py      → ONE-COMMAND auto-chain:
+   python3 process.py N<N>               (a) scrub.py        — tapered cut of
+                                             loading dead time + Rule N2 typing
+                                             speedup + Rule #31 buffer-1 compress
+                                         (b) tick_cut.py     — Progress sidebar
+                                             tick detection + compression +
+                                             auto-emit z0/z0b zooms
+                                         (c) zoom.py         — apply camera moves
+                                         (d) cap_dead_times  — post-tick freeze
+                                             cap (Hard Rule #26)
+                                         (e) news_render.py  — Hyperframes
+                                             composition (5s title + recording +
+                                             7s Polaris outro)
+                                         (f) lint_news.py    — 17 mechanical
+                                             checks; writes lint-report.json
+                                         → recordings/N<N>/zoom.mp4    (processed source)
+                                         → recordings/N<N>/final.mp4   (branded deliverable)
+                                         → recordings/N<N>/lint-report.json
+                                         Exit code reflects render OR lint result.
+                                         Standalone-callable for re-runs without
+                                         re-recording. --no-render / --no-lint
+                                         flags skip respective stages.
 ```
+
+The capture + processing layers are decoupled — capture is workflow-agnostic and writes raw artifacts; `process.py` owns the news-side auto-chain into render + lint.
 
 ## End-of-streaming detection (dual-region stop-vs-mic)
 
@@ -88,14 +98,21 @@ Rules that don't exist in the main pipeline because they're specific to the news
 
 ### How this gets enforced
 
-By **glance, not by automation**. Anyone (including future-me) touching the news-pipeline should open this section first; the **bold** rows are load-bearing for video quality. The 60fps miss earlier this session traced directly to not having this table — `news-pipeline/tools/render.py` was built without ever cross-referencing the main pipeline's rule set.
+By **lint, not by glance**. `news-pipeline/tools/lint_news.py` runs at the end of every `process.py` invocation and writes `recordings/N<N>/lint-report.json` with structured findings. Tier 1 rules (errors) cover the bold-row hard rules above; tier 2 (warnings) cover advisory checks. The lint produces a non-zero exit code on any tier-1 failure, so any orchestrator (CI, agent, shell wrapper) sees the signal cleanly.
 
-## Phase 1 — foundation (current state)
+What lint covers from this table: Rule #11 (color space) → L16, #13 (no slowdown) → L11, #14 (source preserved) → L01, #15 (60fps + 1s keyframes) → L02 + L03, #20 (ticks programmatic) → L10, #22 (z0 ease-out at typing-end) → L06, #23 (skeleton) → L07, #26 (post-streaming dead-time cap) → L14 (heuristic), #29 (z0b over still + raw-tail stitch) → reflected in artifact structure, #30 (static gateway) → L15, #31 (continuous z0→z0b + buffer-1 compression) → L08 + L09, N2 (typing speedup) → L05.
+
+Lint cannot catch: subjective quality (does the brief look good?), Cowork-side issues (did the model actually answer the prompt well?), or the read-through pacing of the smooth scroll-down. These remain by-glance.
+
+## Foundation requirements (one-time setup)
 
 - [x] Install `cliclick`, verify `ffmpeg` avfoundation, verify Python PIL
 - [x] Install `pyobjc-framework-Quartz` (for window-ID lookup)
+- [x] Install `pytesseract` + `tesseract` brew (for AskUserQuestion popup detection)
 - [x] `automation/calibrate.py` — fullscreen Claude, capture mic + stop button references via cross-Space window-ID capture
 - [x] `automation/capture.py` — drives Claude desktop + records (relocated to shared automation/ layer 2026-05-29)
+- [x] `news-pipeline/tools/process.py` — auto-chains scrub → tick_cut → zoom → cap_dead → news_render → lint_news
+- [x] `news-pipeline/tools/lint_news.py` — 17 mechanical rules covering the news-pipeline rule surface
 
 ## Manual setup (one-time)
 

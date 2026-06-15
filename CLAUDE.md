@@ -122,6 +122,23 @@ Pipeline tooling, skills, templates, and orchestration are all built and validat
 
 ---
 
+## Second pipeline — news-pipeline (autonomous N-series)
+
+A **separate workflow** lives at `news-pipeline/`. It's the cheap, fully-automated analogue of the product-demo pipeline — no script, no avatar, no editorial layer, no HeyGen billing. Use case: an LLM (or you) writes a Parallax prompt, capture.py drives Cowork to solve it, the news pipeline post-processes the recording and renders a branded `final.mp4`. End-to-end automated; one command per slot.
+
+```bash
+python automation/capture.py --slot-dir news-pipeline/recordings/N5 <prompt-file>
+python news-pipeline/tools/process.py N5     # auto-chains: scrub → tick_cut → zoom →
+                                              # cap_dead → news_render → lint_news
+                                              # exit code reflects lint result
+```
+
+Output: `news-pipeline/recordings/N<N>/final.mp4` + `lint-report.json`. Lint covers the news-applicable Hard Rules (#11, #13, #14, #15, #20, #22, #23, #26, #27, #29, #30, #31, N2) mechanically. Read `news-pipeline/README.md` + `news-pipeline/templates/news/RENDER-GUIDE.md` for the news-specific architecture and conventions. News-pipeline hard rules live at `.claude/skills/video-production-workflow/rules/phase-3-news.md` + `phase-5-5-news.md`.
+
+The news pipeline shares `automation/capture.py`, `tools/scrub.py`, `tools/zoom.py`, `tools/detect_ticks.py`, and `tools/static_gateway.py` with the product-demo pipeline. It does NOT share the script/zoom/avatar/lint/review stack (those are V-series-specific).
+
+---
+
 ## If the user asks you to
 
 > **All phase triggers below route through the `parallax-video` skill — invoke it via the Skill tool first.** This table is an index of triggers and which phase they map to, not a substitute for the skill's protocol. Shortcutting to the underlying bash command (e.g. running `tools/scrub.py` directly on a "scrub V5" request) bypasses Phase 3's raw audit, ffprobe verify, frame extract, and per-beat audit — exactly the steps the locked-in rules require. CLAUDE.md is the index; the skill is the protocol.
@@ -145,6 +162,9 @@ Pipeline tooling, skills, templates, and orchestration are all built and validat
 | **"Clean V5 frames"** | **Phase 11** — `rm -rf frames/V5/` after user confirms final is shippable. Script's `frames_used:` is the durable record. |
 | **"Build a Hyperframes template"** | Not in the orchestrator — Claude Design is browser-only. Walk the user through `references/claude-design-to-hyperframes.md`. |
 | **"Render failed, debug"** | Not a phase — debug checklist: `.env` loaded? `npx hyperframes lint <template>` clean? Source 60fps with 1s keyframes? RENDER-GUIDE constraints respected? Wallet balance > $0? |
+| **"Capture N5"** / **"Record N5 with this prompt"** | **News pipeline capture.** `python3 automation/capture.py --slot-dir news-pipeline/recordings/N5 <prompt-file>`. Records `raw.mp4` + `trimmed.mp4` + `manifest.json`. Same `automation/capture.py` as V-series — workflow-agnostic. AskUserQuestion popups auto-dismissed via OCR + verify-and-retry. |
+| **"Process N5"** / **"Render N5"** | **News pipeline auto-chain.** `python3 news-pipeline/tools/process.py N5`. ONE command, six stages: scrub → tick_cut → zoom → cap_dead → news_render (Hyperframes title + recording + Polaris outro) → lint_news. Outputs `zoom.mp4` + `final.mp4` + `lint-report.json`. Exit code = render failure OR lint errors. Skip render with `--no-render`; skip lint with `--no-lint`. $0 end-to-end — no HeyGen, no LLM. |
+| **"Lint N5"** | **News pipeline mechanical lint.** `python3 news-pipeline/tools/lint_news.py N5`. 17 deterministic rules covering the news rule surface (#11, #13, #14, #15, #20, #22, #23, #26, #27, #29, #30, #31, N2). Tier 1 errors (L01–L11) block; tier 2 warns (L12–L17) carry. Writes machine-readable JSON via `--json-out` (auto-set to `<slot>/lint-report.json` when invoked from `process.py`). $0 always. **Auto-runs at the end of `process.py`.** |
 
 ---
 
